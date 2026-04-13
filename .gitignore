@@ -1,0 +1,59 @@
+# ==========================================
+# Kroove Player 全栈 Git 忽略配置
+# ==========================================
+
+# --- 系统与编辑器 ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.sln
+*.swp
+
+# --- Node.js 基础 ---
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+npm-debug.log*
+yarn-debug.log*
+
+# --- 前端 (kroove/) ---
+kroove/node_modules/
+kroove/dist/
+kroove/dist-ssr/
+kroove/*.local
+
+# --- 后端与 C++ 引擎 (modules-master/) ---
+modules-master/app/node_modules/
+modules-master/app/build/
+modules-master/app/Release/
+modules-master/app/Debug/
+modules-master/app/bin/
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.obj
+*.exe
+*.dll
+*.a
+*.pyd
+modules-master/app/ag_backend.node
+modules-master/app/libmpv-2.dll
+
+# --- 应用生成的本地数据与缓存 (极其重要，防止上传曲库) ---
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+kroove_config.json
+/cache/
+modules-master/app/cache/
+kroove/cache/
+
+# --- 其他环境配置 ---
+.env
+.env.*
+!.env.example
