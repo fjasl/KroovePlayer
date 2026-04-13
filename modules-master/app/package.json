@@ -1,0 +1,24 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "test.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "chokidar": "^5.0.0",
+    "cmake-js": "^8.0.0",
+    "express": "^5.2.1",
+    "log-update": "^7.1.0",
+    "mpris-service": "^2.1.2",
+    "music-metadata": "^11.12.1",
+    "node-addon-api": "^8.5.0",
+    "ws": "^8.20.0"
+  }
+}

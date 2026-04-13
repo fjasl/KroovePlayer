@@ -1,0 +1,54 @@
+# ==========================================
+# Kroove Player - 全栈统一 .gitignore
+# ==========================================
+
+# 1. 通用依赖与环境配置
+node_modules/
+.env*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 2. C++ 与后端引擎 (modules-master)
+# 构建产物
+modules-master/app/build/
+modules-master/app/Release/
+modules-master/app/Debug/
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.obj
+
+# 后端生成的本地状态与缓存
+kroove.db
+kroove.db-journal
+kroove.db-shm
+kroove.db-wal
+kroove_config.json
+modules-master/app/cache/
+modules-master/cache/
+# 排除极大的 mpv 动态链接库？(如果之前没有 commit 的话建议忽略)
+# modules-master/app/libmpv-2.dll
+
+# 3. 前端 Vue 3 (kroove)
+kroove/dist/
+kroove/dist-ssr/
+*.local
+.DS_Store
+.vscode/
+
+# 4. 其他编辑器与操作系统缓存
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
