@@ -7,7 +7,10 @@ const configPath = path.resolve(__dirname, '../../kroove_config.json');
 const defaultConfig = {
     libraryFolders: [], // 记录所有监听扫描的本地音乐文件夹
     themeMode: 'system',
-    autoRetrieve: true
+    autoRetrieve: true,
+    last_played_index: 0,
+    playbackMode: 'sequential', // 播放模式
+    volume: 1.0                // 音量
 };
 
 class ConfigManager {

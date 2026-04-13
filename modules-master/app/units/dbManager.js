@@ -27,34 +27,12 @@ db.exec(`
             is_lrc_manual INTEGER DEFAULT 0,
             is_cover_manual INTEGER DEFAULT 0
         );
-
-        -- 2. 库文件夹表：记录用户监控的曲库根目录
-        CREATE TABLE IF NOT EXISTS library_folders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            path TEXT UNIQUE NOT NULL
-        );
-
-        -- 3. 应用状态表
-        CREATE TABLE IF NOT EXISTS app_state (
-            key TEXT UNIQUE NOT NULL,
-            value TEXT NOT NULL
-        );
     `);
 
 module.exports = {
   db,
   // 【核心能力】极速由 ID 获取物理路径
   getTrackById: (id) => db.prepare("SELECT * FROM tracks WHERE id = ?").get(id),
-  setState: (key, val) =>
-    db
-      .prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)")
-      .run(key, JSON.stringify(val)),
-  getState: (key) => {
-    const row = db
-      .prepare("SELECT value FROM app_state WHERE key = ?")
-      .get(key);
-    return row ? JSON.parse(row.value) : null;
-  },
   // dbManager.js
   updateTrackManual: (id, data) => {
     const fields = [];

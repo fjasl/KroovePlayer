@@ -79,6 +79,9 @@ class CoreManager {
   async bootstrap() {
     console.log("🛠️ Kroove 引擎正在启动...");
 
+    const savedVolume = configManager.get('volume') || 1.0;
+    this.engine.setVolume(savedVolume);
+    console.log(`🔊 音量已恢复至: ${(savedVolume * 100).toFixed(0)}%`);
     // 1. 从刚才建立的 JSON 配置文件中获取监控目录
     this.libraryFolders = configManager.get("libraryFolders") || [];
 
@@ -214,6 +217,11 @@ class CoreManager {
     this.broadcast({ type: "library_folders", folders: this.libraryFolders });
     // 下发最新歌单大全
     this.broadcast({ type: "full_playlist", list: playlist.getFullList() });
+    this.broadcast({
+      type: "player_config",
+      volume: configManager.get('volume'),
+      playbackMode: playlist.mode // 从 playlistManager 获取当前模式
+    });
   }
   // coreManager.js
   async updateTrackManual(id, data) {
@@ -253,6 +261,7 @@ class CoreManager {
         break;
       case "set_volume":
         this.engine.setVolume(cmd.volume);
+        configManager.set('volume', cmd.volume);
         break;
       case "set_mute":
         this.engine.setMute(cmd.mute);
