@@ -1,13 +1,13 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
+const Database = require("better-sqlite3");
+const path = require("path");
+const fs = require("fs");
 
-const dbPath = path.resolve(__dirname, '../../kroove.db');
+const dbPath = path.resolve(__dirname, "../../kroove.db");
 const db = new Database(dbPath);
 
-// 初始化数据表 
-    // 1. 核心曲目表：增加了文件指纹和手动标志位
-    db.exec(`
+// 初始化数据表
+// 1. 核心曲目表：增加了文件指纹和手动标志位
+db.exec(`
         CREATE TABLE IF NOT EXISTS tracks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             path TEXT UNIQUE NOT NULL,    -- 音乐路径
@@ -42,12 +42,37 @@ const db = new Database(dbPath);
     `);
 
 module.exports = {
-    db,
-    // 【核心能力】极速由 ID 获取物理路径
-    getTrackById: (id) => db.prepare('SELECT * FROM tracks WHERE id = ?').get(id),
-    setState: (key, val) => db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)').run(key, JSON.stringify(val)),
-    getState: (key) => {
-        const row = db.prepare('SELECT value FROM app_state WHERE key = ?').get(key);
-        return row ? JSON.parse(row.value) : null;
+  db,
+  // 【核心能力】极速由 ID 获取物理路径
+  getTrackById: (id) => db.prepare("SELECT * FROM tracks WHERE id = ?").get(id),
+  setState: (key, val) =>
+    db
+      .prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)")
+      .run(key, JSON.stringify(val)),
+  getState: (key) => {
+    const row = db
+      .prepare("SELECT value FROM app_state WHERE key = ?")
+      .get(key);
+    return row ? JSON.parse(row.value) : null;
+  },
+  // dbManager.js
+  updateTrackManual: (id, data) => {
+    const fields = [];
+    const values = [];
+
+    if (data.lrc_path !== undefined) {
+      fields.push("lrc_path = ?", "is_lrc_manual = 1");
+      values.push(data.lrc_path);
     }
+    if (data.cover_path !== undefined) {
+      fields.push("cover_path = ?", "is_cover_manual = 1");
+      values.push(data.cover_path);
+    }
+
+    if (fields.length === 0) return;
+    values.push(id);
+    return db
+      .prepare(`UPDATE tracks SET ${fields.join(", ")} WHERE id = ?`)
+      .run(...values);
+  },
 };
