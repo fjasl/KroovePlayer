@@ -72,14 +72,12 @@ watch(() => playerStore.isFullScreen, (newVal) => {
 
 <template>
   <transition name="fade-screen">
-    <div 
-      v-show="playerStore.isFullScreen" 
-      class="full-screen-player"
-      @mousemove="handleMouseMove"
-    >
+    <div v-show="playerStore.isFullScreen" class="full-screen-player" @mousemove="handleMouseMove">
       <!-- 高斯模糊背景 -->
       <div class="bg-wrapper">
-        <div class="bg-image" :style="playerStore.currentTrack.coverUrl ? `background-image: url(${playerStore.currentTrack.coverUrl})` : ''"></div>
+        <div class="bg-image"
+          :style="playerStore.currentTrack.coverUrl ? `background-image: url(${playerStore.currentTrack.coverUrl})` : ''">
+        </div>
         <div class="bg-overlay"></div>
       </div>
 
@@ -94,7 +92,8 @@ watch(() => playerStore.isFullScreen, (newVal) => {
       <footer class="bottom-container">
         <!-- 基础信息区：闲置时跟随下落 -->
         <div class="info-row" :class="{ 'info-idle': isIdle }">
-          <div class="cover" :style="playerStore.currentTrack.coverUrl ? `background-image: url(${playerStore.currentTrack.coverUrl})` : ''">
+          <div class="cover"
+            :style="playerStore.currentTrack.coverUrl ? `background-image: url(${playerStore.currentTrack.coverUrl})` : ''">
           </div>
           <div class="texts">
             <div class="title">{{ playerStore.currentTrack.title }}</div>
@@ -107,61 +106,41 @@ watch(() => playerStore.isFullScreen, (newVal) => {
           <div class="progress-row">
             <span class="time">{{ formatTime(playerStore.currentTime) }}</span>
             <div class="slider-wrapper">
-              <GrooveSlider 
-                v-model="playerStore.currentTime" 
-                :max="playerStore.duration" 
+              <GrooveSlider v-model="playerStore.currentTime" :max="playerStore.duration"
                 @mousedown="playerStore.setDragging(true)"
-                @change="(val: number) => { playerStore.setDragging(false); playerStore.seek(val); }"
-              />
+                @change="(val: number) => { playerStore.setDragging(false); playerStore.seek(val); }" />
             </div>
             <span class="time">{{ formatTime(playerStore.duration) }}</span>
           </div>
 
-        <div class="controls-row">
-          <div class="left-action">
-            <PlayerButton :icon="IconPrev" :icon-size="20" @click="playerStore.playPrev" />
-            <div class="play-trigger">
-              <PlayerButton 
-                :icon="playerStore.isPlaying ? IconPause : IconPlay" 
-                :size="48" 
-                :icon-size="playerStore.isPlaying ? 20 : 22"
-                :is-outline="false" 
-                @click="playerStore.togglePlay"
-              />
+          <div class="controls-row">
+            <div class="left-action">
+              <PlayerButton :icon="IconPrev" :icon-size="20" @click="playerStore.playPrev" />
+              <div class="play-trigger">
+                <PlayerButton :icon="playerStore.isPlaying ? IconPause : IconPlay" :size="48"
+                  :icon-size="playerStore.isPlaying ? 20 : 22" :is-outline="false" @click="playerStore.togglePlay" />
+              </div>
+              <PlayerButton :icon="IconNext" :icon-size="20" @click="playerStore.playNext" />
+              <PlayerButton :icon="IconShuffle" :active="playerStore.isShuffle" :icon-size="20"
+                @click="playerStore.toggleShuffle()" />
+              <PlayerButton :icon="IconRepeat" :active="playerStore.isRepeat" :icon-size="20"
+                @click="playerStore.toggleRepeat()" />
+              <div class="volume-control">
+                <PlayerButton :icon="currentVolumeIcon" :icon-size="22" @click="playerStore.toggleMute" />
+              </div>
+              <PlayerButton :icon="IconMore" :icon-size="20" />
             </div>
-            <PlayerButton :icon="IconNext" :icon-size="20" @click="playerStore.playNext" />
-            <PlayerButton 
-              :icon="IconShuffle" 
-              :active="playerStore.isShuffle" 
-              :icon-size="20"
-              @click="playerStore.toggleShuffle()" 
-            />
-            <PlayerButton 
-              :icon="IconRepeat" 
-              :active="playerStore.isRepeat" 
-              :icon-size="20"
-              @click="playerStore.toggleRepeat()" 
-            />
-            <div class="volume-control">
-              <PlayerButton 
-                :icon="currentVolumeIcon" 
-                :icon-size="22" 
-                @click="playerStore.toggleMute"
-              />
+
+            <div class="right-action">
+              <PlayerButton :icon="IconPlaylist" :icon-size="22" />
+              <PlayerButton :icon="IconLyrics" :icon-size="22" />
+              <PlayerButton :icon="IconFullscreen" :icon-size="22" />
             </div>
-            <PlayerButton :icon="IconMore" :icon-size="20" />
           </div>
 
-          <div class="right-action">
-            <PlayerButton :icon="IconPlaylist" :icon-size="22" />
-            <PlayerButton :icon="IconLyrics" :icon-size="22" />
-            <PlayerButton :icon="IconFullscreen" :icon-size="22" />
+          <div class="bottom-arrow" @click="closeFullScreen">
+            <IconArrowUp />
           </div>
-        </div>
-        
-        <div class="bottom-arrow" @click="closeFullScreen">
-          <IconArrowUp />
-        </div>
         </div>
       </footer>
     </div>
@@ -177,7 +156,8 @@ watch(() => playerStore.isFullScreen, (newVal) => {
   height: 100vh;
   z-index: 1000;
   color: #fff;
-  background-color: #000; /* 添加纯黑底片，阻绝任何毛玻璃模糊后的半透明区域透穿到底层 */
+  background-color: #000;
+  /* 添加纯黑底片，阻绝任何毛玻璃模糊后的半透明区域透穿到底层 */
   overflow: hidden;
   font-family: inherit;
 }
@@ -187,6 +167,7 @@ watch(() => playerStore.isFullScreen, (newVal) => {
 .fade-screen-leave-active {
   transition: opacity 0.4s ease;
 }
+
 .fade-screen-enter-from,
 .fade-screen-leave-to {
   opacity: 0;
@@ -205,10 +186,11 @@ watch(() => playerStore.isFullScreen, (newVal) => {
 .bg-image {
   width: 100%;
   height: 100%;
-  background-image: url('https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=1000'); /* 示例专辑图片 */
+  background-image: url('https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=1000');
+  /* 示例专辑图片 */
   background-size: cover;
   background-position: center;
-  filter: blur(80px);
+  filter: blur(40px);
   transform: scale(1.1);
 }
 
@@ -274,7 +256,8 @@ watch(() => playerStore.isFullScreen, (newVal) => {
 }
 
 .is-hidden-bottom {
-  transform: translateY(115px); /* 保持与上面相同的下降绝对像素值，从而速度同步 */
+  transform: translateY(115px);
+  /* 保持与上面相同的下降绝对像素值，从而速度同步 */
   opacity: 0;
   pointer-events: none;
 }
@@ -289,17 +272,19 @@ watch(() => playerStore.isFullScreen, (newVal) => {
 }
 
 .info-idle {
-  transform: translateY(115px); /* 下方进度条和按钮区的大致高度，使其落在底部 */
+  transform: translateY(115px);
+  /* 下方进度条和按钮区的大致高度，使其落在底部 */
 }
 
 .cover {
   width: 80px;
   height: 80px;
-  background-image: url('https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=1000'); /* 示例专辑图片 */
+  background-image: url('https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=1000');
+  /* 示例专辑图片 */
   background-size: cover;
   background-position: center;
   border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .texts {
@@ -311,7 +296,7 @@ watch(() => playerStore.isFullScreen, (newVal) => {
   font-size: 28px;
   font-weight: 700;
   margin-bottom: 6px;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .artist {
@@ -377,6 +362,7 @@ watch(() => playerStore.isFullScreen, (newVal) => {
   transition: color 0.2s;
   padding-bottom: 10px;
 }
+
 .bottom-arrow:hover {
   color: #fff;
 }

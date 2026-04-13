@@ -10,7 +10,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   const currentTime = ref(0)
   const duration = ref(0)
-  
+
   const isFullScreen = ref(false) // 全屏页面是否展开
 
   // 接收后端传来的当前曲目源信息
@@ -34,7 +34,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   // 全局 socket 管理
   let ws: WebSocket | null = null;
-  let isDraggingProgress = false; 
+  let isDraggingProgress = false;
 
   const initConnection = () => {
     if (ws) return;
@@ -84,12 +84,24 @@ export const usePlayerStore = defineStore('player', () => {
         if (data.type === 'full_playlist') {
           fullPlaylist.value = data.list || [];
         }
+        // 5. 播放器配置刷新
+        if (data.type === 'player_config') {
+          // 1. 同步音量 (后端 0.0~1.0 -> 前端 0~100)
+          if (data.volume !== undefined) {
+            volume.value = Math.round(data.volume);
+          }
 
+          // 2. 同步播放模式
+          if (data.playbackMode) {
+            isShuffle.value = (data.playbackMode === 'shuffle');
+            isRepeat.value = (data.playbackMode === 'repeat');
+          }
+        }
       } catch (e) {
         console.warn('Socket message parse err:', e);
       }
     };
-    
+
     ws.onclose = () => {
         console.warn('🔌 WebSocket 断开，正在尝试重连...');
         ws = null;
@@ -152,7 +164,7 @@ export const usePlayerStore = defineStore('player', () => {
     currentTime,
     duration,
     isFullScreen,
-    
+
     currentTrack,
     windowPlaylist,
     libraryFolders,
