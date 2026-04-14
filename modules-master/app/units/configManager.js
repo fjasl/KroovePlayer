@@ -8,7 +8,7 @@ const defaultConfig = {
     libraryFolders: [], // 记录所有监听扫描的本地音乐文件夹
     themeMode: 'system',
     autoRetrieve: true,
-    last_played_index: 0,
+    last_played_id: null,
     playbackMode: 'sequential', // 播放模式
     volume: 1.0                // 音量
 };

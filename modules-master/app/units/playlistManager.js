@@ -44,7 +44,19 @@ class PlaylistManager {
             });
         });
 
-        this.currentIndex = configManager.get('last_played_index') || 0;
+        // [Fix] 废弃 Index 持久化，改用 ID 持久化。
+        // 强制使用 Number() 转换，防止 JSON 读取出的 String 类型导致 indexOf 查找失败
+        const rawId = configManager.get('last_played_id');
+        if (rawId !== undefined && rawId !== null) {
+            const lastId = Number(rawId);
+            const idx = this.queue.indexOf(lastId);
+            this.currentIndex = (idx !== -1) ? idx : 0;
+            if (idx !== -1) {
+                console.log(`📌 已从配置恢复播放位置: ID ${lastId} (索引 ${idx})`);
+            }
+        } else {
+            this.currentIndex = 0;
+        }
     }
 
     getFullList() {
@@ -102,8 +114,9 @@ class PlaylistManager {
             this.currentIndex = (this.currentIndex + 1) % this.queue.length;
         }
 
-        configManager.set('last_played_index', this.currentIndex);
-        return this.queue[this.currentIndex];
+        const nextId = this.queue[this.currentIndex];
+        configManager.set('last_played_id', nextId);
+        return nextId;
     }
 
     prev() {
@@ -121,13 +134,23 @@ class PlaylistManager {
             prevId = this.queue[this.currentIndex];
         }
 
-        configManager.set('last_played_index', this.currentIndex);
+        configManager.set('last_played_id', prevId);
         return prevId;
     }
 
     current() {
         if (this.queue.length === 0) return null;
         return this.queue[this.currentIndex];
+    }
+
+    // [New] 强制设置当前播放索引 (根据 ID)
+    setById(id) {
+        const targetId = Number(id); // 强制转为数字，防止 WebSocket 传入字符串
+        const idx = this.queue.indexOf(targetId);
+        if (idx !== -1) {
+            this.currentIndex = idx;
+            configManager.set('last_played_id', targetId);
+        }
     }
 
     /**

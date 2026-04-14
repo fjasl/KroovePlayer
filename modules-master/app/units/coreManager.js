@@ -15,6 +15,7 @@ class CoreManager {
     this.lastLayout = null; // 缓存最新歌词，供后来连入的客户端同步
     this.libraryFolders = []; // 实时维护监控目录列表
     this.playlist = playlist;
+    this.currentPlaying = null; // [New] 显式维护当前正在播的元数据，不依赖游标。
 
     // 锁定引用防止被 GC
     global._engineRef = this.engine;
@@ -101,7 +102,12 @@ class CoreManager {
 
     playlist.loadAll();
     if (playlist.queue.length > 0) {
-      this.playById(playlist.queue[playlist.currentIndex]);
+      // [Fix] 这里的 currentIndex 已经在 loadAll 中根据 last_played_id 恢复过了
+      const lastId = playlist.current();
+      if (lastId) {
+         console.log(`🎬 自动恢复上次播放: ID ${lastId}`);
+         this.playById(lastId);
+      }
     }
   }
 
@@ -131,6 +137,11 @@ class CoreManager {
   playById(id) {
     const track = dbManager.getTrackById(id);
     if (!track) return;
+
+    // 1. 更新后端“锁死”的当前播放数据
+    this.currentPlaying = track;
+    // 2. 更新列表管理器的游标，确保“下一首”没问题
+    playlist.setById(id);
 
     console.log(`🎶 正在播放: ${track.title} | 歌手: ${track.artist}`);
     const layout = this.engine.load(track.path, track.lrc_path || "");
@@ -206,13 +217,21 @@ class CoreManager {
    * 向指定客户端或全局同步当前全量状态
    */
   syncCurrentState() {
-    const curId = playlist.current();
-    if (curId) {
-      const track = dbManager.getTrackById(curId);
-      // 这里千万不能再调 this.playById()，那会把进度从 0 开始重新 load。只推界面。
-      this.broadcastUiUpdate(curId, track, this.lastLayout);
+    // 优先从显式维护的 currentPlaying 同步，这比从索引取更安全
+    if (this.currentPlaying) {
+      this.broadcastUiUpdate(this.currentPlaying.id, this.currentPlaying, this.lastLayout);
     } else {
-      this.broadcast({ type: "ui_empty", message: "曲库为空或未开始播放" });
+      // 如果内存没有，再尝试从持久化索引找回（针对刚开机的场景）
+      const curId = playlist.current();
+      if (curId) {
+        const track = dbManager.getTrackById(curId);
+        if (track) {
+          this.currentPlaying = track;
+          this.broadcastUiUpdate(curId, track, this.lastLayout);
+        }
+      } else {
+        this.broadcast({ type: "ui_empty", message: "曲库为空或未开始播放" });
+      }
     }
     // 下发一次当前处于监视中的目录状态用于前端渲染
     this.broadcast({ type: "library_folders", folders: this.libraryFolders });

@@ -1,6 +1,6 @@
 <!-- src/frame/Sidebar.vue -->
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import SidebarItem from '../component/SidebarItem.vue';
 import SidebarSearch from '../component/SidebarSearch.vue';
 
@@ -12,6 +12,7 @@ import IconSettings from '../assets/icons/IconSettings.vue';
 import IconMenu from '../assets/icons/IconMenu.vue';
 
 const isExpanded = ref(false);
+const sidebarRef = ref<HTMLElement | null>(null);
 
 const props = defineProps<{ activeId?: string }>();
 const emit = defineEmits<{ (e: 'update:activeId', id: string): void }>();
@@ -24,10 +25,24 @@ const menuItems = [
 
 const toggle = () => (isExpanded.value = !isExpanded.value);
 const select = (id: string) => emit('update:activeId', id);
+
+const handleClickOutside = (event: MouseEvent) => {
+  if (isExpanded.value && sidebarRef.value && !sidebarRef.value.contains(event.target as Node)) {
+    isExpanded.value = false;
+  }
+};
+
+onMounted(() => {
+  window.addEventListener('mousedown', handleClickOutside);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('mousedown', handleClickOutside);
+});
 </script>
 
 <template>
-  <aside class="sidebar" :class="{ 'is-expanded': isExpanded }">
+  <aside ref="sidebarRef" class="sidebar" :class="{ 'is-expanded': isExpanded }">
     <!-- 汉堡按钮：自成首部占位 -->
     <div class="hamburger-container" @click="toggle">
       <div class="icon-box">
