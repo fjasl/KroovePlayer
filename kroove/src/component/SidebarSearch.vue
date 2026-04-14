@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import IconSearch from '../assets/icons/IconSearch.vue';
+import { usePlayerStore } from '../stores/player';
 
 defineProps<{
   isExpanded: boolean;
@@ -9,7 +10,17 @@ defineProps<{
 
 const emit = defineEmits(['toggle-sidebar']);
 
+const playerStore = usePlayerStore();
 const isFocused = ref(false);
+const searchQuery = ref('');
+let debounceTimer: any = null;
+
+const handleSearch = () => {
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    playerStore.sendCommand({ cmd: 'search_playlist', query: searchQuery.value });
+  }, 300);
+};
 </script>
 
 <template>
@@ -20,6 +31,7 @@ const isFocused = ref(false);
       @click="!isExpanded && emit('toggle-sidebar')"
     >
       <input 
+        v-model="searchQuery"
         type="text" 
         placeholder="搜索" 
         class="search-input"
@@ -29,6 +41,7 @@ const isFocused = ref(false);
         }"
         @focus="isFocused = true"
         @blur="isFocused = false"
+        @input="handleSearch"
       />
       <div class="search-icon-wrapper">
         <IconSearch 

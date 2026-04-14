@@ -63,6 +63,23 @@ class PlaylistManager {
         return ids.map(id => dataMap.get(id)).filter(item => !!item);
     }
 
+    // [New] 根据关键词搜索 ID 列表
+    searchIds(query) {
+        if (!query || query.trim() === "") {
+            return this.queue; // 为空则返回全量队列
+        }
+        const keyword = query.toLowerCase().trim();
+        const result = [];
+        
+        // 遍历 idToName 进行关键词匹配
+        for (const [id, name] of this.idToName.entries()) {
+            if (name.toLowerCase().includes(keyword)) {
+                result.push(id);
+            }
+        }
+        return result;
+    }
+
     next(isAuto = false) {
         if (this.queue.length === 0) return null;
 

@@ -210,6 +210,7 @@ export const usePlayerStore = defineStore('player', () => {
 
     initConnection,
     fetchBatchMetadata,
+    sendCommand,
     togglePlay,
     playNext,
     playPrev,

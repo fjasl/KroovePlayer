@@ -291,6 +291,14 @@ class CoreManager {
           });
         }
         break;
+      case "search_playlist":
+        // 支持搜索过滤请求
+        const filteredIds = playlist.searchIds(cmd.query);
+        this.broadcast({
+          type: "queue_ids",
+          ids: filteredIds
+        });
+        break;
     }
   }
 }
