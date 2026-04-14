@@ -79,9 +79,9 @@ class CoreManager {
   async bootstrap() {
     console.log("🛠️ Kroove 引擎正在启动...");
 
-    const savedVolume = configManager.get('volume') || 1.0;
+    const savedVolume = configManager.get('volume') || 70.0;
     this.engine.setVolume(savedVolume);
-    console.log(`🔊 音量已恢复至: ${(savedVolume * 100).toFixed(0)}%`);
+    console.log(`🔊 音量已恢复至: ${(savedVolume).toFixed(0)}%`);
     // 1. 从刚才建立的 JSON 配置文件中获取监控目录
     this.libraryFolders = configManager.get("libraryFolders") || [];
 
@@ -228,11 +228,15 @@ class CoreManager {
     dbManager.updateTrackManual(id, data);
     console.log(`✅ 已手动匹配曲目 [ID: ${id}] 的资源`);
 
-    // 如果更新的是当前正在播放的歌曲，可以主动广播一次 UI 更新
-    if (id === playlist.current()) {
-      this.syncCurrentState();
-    }
+    // 只要更新了曲目信息，就发起一次全局同步，确保列表和播放状态刷新
+    this.syncCurrentState();
   }
+
+  // 获取特定歌曲的所有元数据细节
+  getTrackDetails(id) {
+    return dbManager.getTrackById(id);
+  }
+
   handleCommand(cmd) {
     switch (cmd.cmd) {
       case "get_sync":

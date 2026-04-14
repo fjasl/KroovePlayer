@@ -10,6 +10,17 @@ class NetworkManager {
     this.core = core;
     this.app = express();
     this.app.use(express.json()); // 支持 JSON 请求体
+
+    // 配置 CORS，允许前端跨域请求
+    this.app.use((req, res, next) => {
+      res.header("Access-Control-Allow-Origin", "*");
+      res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.header("Access-Control-Allow-Headers", "Content-Type");
+      if (req.method === "OPTIONS") {
+        return res.sendStatus(200);
+      }
+      next();
+    });
     this.server = http.createServer(this.app);
     this.wss = new WebSocketServer({ server: this.server });
 
@@ -30,8 +41,18 @@ class NetworkManager {
         res.status(404).send("No cover");
       }
     });
+    
+    // 2. 获取单曲详情
+    this.app.get("/api/track/details/:id", (req, res) => {
+      const details = this.core.getTrackDetails(req.params.id);
+      if (details) {
+        res.json(details);
+      } else {
+        res.status(404).json({ error: "Track not found" });
+      }
+    });
 
-    // 2. 库管理接口：添加新的物理目录
+    // 3. 库管理接口：添加新的物理目录
     this.app.post("/api/library/add", async (req, res) => {
       const { folderPath } = req.body;
       if (!folderPath)

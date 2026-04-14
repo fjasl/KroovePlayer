@@ -3,7 +3,10 @@
 import IconCheckboxOutline from '../assets/icons/IconCheckboxOutline.vue'
 import IconPlayOutline from '../assets/icons/IconPlayOutline.vue'
 import IconAdd from '../assets/icons/IconAdd.vue'
+import IconEdit from '../assets/icons/IconEdit.vue'
+import TrackEditDialog from './TrackEditDialog.vue'
 import { usePlayerStore } from '../stores/player'
+import { ref } from 'vue'
 
 const props = defineProps<{
   id: number
@@ -16,6 +19,8 @@ const props = defineProps<{
 }>()
 
 const playerStore = usePlayerStore()
+
+const showEditDialog = ref(false)
 
 const handlePlay = (e: Event) => {
   e.stopPropagation()
@@ -41,7 +46,16 @@ const handlePlay = (e: Event) => {
         <button class="action-btn add-btn" title="添加到..">
           <IconAdd style="width: 18px; height: 18px;" />
         </button>
+        <button class="action-btn edit-btn" title="编辑信息" @click.stop="showEditDialog = true">
+          <IconEdit style="width: 18px; height: 18px;" />
+        </button>
       </div>
+
+      <!-- 编辑对话框 -->
+      <TrackEditDialog 
+        v-model="showEditDialog" 
+        :track-id="id" 
+      />
     </div>
     <div class="column artist">{{ artist }}</div>
     <div class="column album">{{ album }}</div>
@@ -156,6 +170,10 @@ const handlePlay = (e: Event) => {
 }
 
 .add-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.edit-btn:hover {
   background: rgba(255, 255, 255, 0.15);
 }
 
