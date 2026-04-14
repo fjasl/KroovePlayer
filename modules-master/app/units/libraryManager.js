@@ -59,7 +59,7 @@ class LibraryManager {
 
             console.log(`🔍 正在解析: ${path.basename(filePath)}`);
             const metadata = await mm.parseFile(filePath);
-            
+
             // 2. 封面处理优先级 (Level 1: 内嵌)
             let coverPath = existing ? existing.cover_path : null;
             if (!existing || existing.is_cover_manual === 0) {
@@ -81,12 +81,10 @@ class LibraryManager {
                 }
             }
 
-            // 3. 歌词匹配逻辑 (Level 1: 外部同名)
+            // 3. 歌词匹配逻辑 (使用独立提取的匹配算法)
             let lrcPath = existing ? existing.lrc_path : null;
             if (!existing || existing.is_lrc_manual === 0) {
-                const baseName = path.basename(filePath, path.extname(filePath));
-                const potLrc = path.join(path.dirname(filePath), baseName + '.lrc');
-                lrcPath = fs.existsSync(potLrc) ? potLrc : null;
+                lrcPath = this.findBestLrc(filePath);
             }
 
             // 4. 入库 (增量更新)
@@ -104,9 +102,9 @@ class LibraryManager {
                     file_mtime = excluded.file_mtime,
                     file_size = excluded.file_size
             `).run(
-                filePath, 
-                lrcPath, 
-                coverPath, 
+                filePath,
+                lrcPath,
+                coverPath,
                 metadata.common.title || path.basename(filePath, '.mp3'),
                 metadata.common.artist || "未知歌手",
                 metadata.common.album || "未知专辑",
@@ -131,7 +129,7 @@ class LibraryManager {
         if (this.watcher) this.watcher.close();
 
         console.log(`👁️  库监视器已开启: 正在观察 ${folders.length} 个目录...`);
-        
+
         this.watcher = chokidar.watch(folders, {
             ignored: /(^|[\/\\])\../, // 忽略隐藏文件
             persistent: true,
@@ -163,17 +161,20 @@ class LibraryManager {
                     console.log(`➕ [Watcher] 发现新曲目: ${path.basename(filePath)}`);
                     await this.processTrack(filePath);
                     triggerChange();
+                } else if (filePath.toLowerCase().endsWith('.lrc')) {
+                    console.log(`📜 [Watcher] 发现新歌词: ${path.basename(filePath)}，正在尝试匹配音频...`);
+                    await this.reprocessDirectory(path.dirname(filePath));
+                    triggerChange();
                 }
             })
             .on('change', async filePath => {
-                if (this.isAudioFile(filePath) || filePath.endsWith('.lrc')) {
-                    console.log(`📝 [Watcher] 更新资源: ${path.basename(filePath)}`);
-                    // 如果是歌词变动，需要处理其对应的音频文件
-                    const targetPath = filePath.endsWith('.lrc') 
-                        ? filePath.replace('.lrc', '.mp3') // 简化逻辑，实际可能需要更复杂的映射
-                        : filePath;
-                    
-                    if (fs.existsSync(targetPath)) await this.processTrack(targetPath);
+                if (this.isAudioFile(filePath)) {
+                    console.log(`📝 [Watcher] 更新曲目: ${path.basename(filePath)}`);
+                    await this.processTrack(filePath);
+                    triggerChange();
+                } else if (filePath.toLowerCase().endsWith('.lrc')) {
+                    console.log(`📝 [Watcher] 歌词内容变动: ${path.basename(filePath)}，重新关联同目录曲目...`);
+                    await this.reprocessDirectory(path.dirname(filePath));
                     triggerChange();
                 }
             })
@@ -182,8 +183,76 @@ class LibraryManager {
                     console.log(`➖ [Watcher] 物理删除: ${path.basename(filePath)}`);
                     dbManager.removeTrackByPath(filePath);
                     triggerChange();
+                } else if (filePath.toLowerCase().endsWith('.lrc')) {
+                    console.log(`➖ [Watcher] 歌词删除: ${path.basename(filePath)}，更新同目录曲目关联...`);
+                    this.reprocessDirectory(path.dirname(filePath));
+                    triggerChange();
                 }
             });
+    }
+
+    /**
+     * 当歌词变动时，重新处理该目录下所有音频文件以同步歌词关联
+     */
+    async reprocessDirectory(dirPath) {
+        try {
+            const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+            for (const entry of entries) {
+                const fullPath = path.resolve(dirPath, entry.name);
+                // 仅针对音频文件执行轻量级的歌词路径更新
+                if (entry.isFile() && this.isAudioFile(fullPath)) {
+                    this.updateLyricOnly(fullPath);
+                }
+            }
+        } catch (e) {
+            console.error(`❌ 重处理目录 ${dirPath} 失败:`, e.message);
+        }
+    }
+
+    /**
+     * [轻量级更新] 仅重新计算并更新歌词路径，不解析音频元数据，不处理封面
+     */
+    updateLyricOnly(audioPath) {
+        const existing = dbManager.db.prepare('SELECT * FROM tracks WHERE path = ?').get(audioPath);
+        if (!existing) return; // 如果歌本身没入库，不处理
+        if (existing.is_lrc_manual !== 0) return; // 用户手动指定的歌词，不自动覆盖
+
+        const newLrcPath = this.findBestLrc(audioPath);
+        
+        // 只有当计算出的歌词路径与数据库不一致时才写入，减少 DB 压力
+        if (newLrcPath !== existing.lrc_path) {
+            dbManager.db.prepare('UPDATE tracks SET lrc_path = ? WHERE path = ?').run(newLrcPath, audioPath);
+            console.log(`🔗 [LyricSync] 已自动关联: ${path.basename(audioPath)} -> ${newLrcPath ? path.basename(newLrcPath) : '无'}`);
+        }
+    }
+
+    /**
+     * [核心算法] 歌词匹配：精确匹配 -> 归一化模糊匹配
+     */
+    findBestLrc(filePath) {
+        const baseName = path.basename(filePath, path.extname(filePath));
+        const dir = path.dirname(filePath);
+
+        // 1. 精确匹配
+        const potLrc = path.join(dir, baseName + '.lrc');
+        if (fs.existsSync(potLrc)) return potLrc;
+
+        // 2. 模糊匹配 (归一化)
+        try {
+            const files = fs.readdirSync(dir);
+            const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
+            const baseNorm = normalize(baseName);
+            if (baseNorm.length === 0) return null;
+
+            const bestMatch = files.find(f => {
+                if (!f.toLowerCase().endsWith('.lrc')) return false;
+                const lrcBaseNorm = normalize(path.basename(f, '.lrc'));
+                return lrcBaseNorm.length > 0 && (baseNorm.includes(lrcBaseNorm) || lrcBaseNorm.includes(baseNorm));
+            });
+            return bestMatch ? path.join(dir, bestMatch) : null;
+        } catch (e) {
+            return null;
+        }
     }
 
     isAudioFile(filePath) {
