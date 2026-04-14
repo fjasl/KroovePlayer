@@ -178,6 +178,7 @@ class LyricNode {
   exitStyle: ExitStyle;
   elapsed: number = 0;
   isFirstUpdate: boolean = true;
+  activeWordIndex: number = -1; // 由后端 wordIndex 驱动，直接定位当前活动词
 
   constructor(lineData: any, canvasWidth: number, canvasHeight: number, tempCtx: CanvasRenderingContext2D, initialElapsed: number = 0) {
     this.text = lineData.text;
@@ -241,33 +242,32 @@ class LyricNode {
     }
   }
 
-  update(dt: number) {
+  // externalWordIndex: 后端实时推送的当前字索引（-1 表示无活动字或非逐字行）
+  update(dt: number, externalWordIndex: number) {
     this.elapsed = performance.now() - this.startTime;
+    this.activeWordIndex = externalWordIndex;
 
     // 基础透明度渐入
     this.opacity += (1 - this.opacity) * 0.1;
 
-    // 4. 追踪光标逻辑
+    // 用后端 wordIndex 驱动词语激活：激活所有 index <= externalWordIndex 的词
     let currentActiveWord: WordSprite | null = null;
-    this.words.forEach(w => {
-      // 检查是否激活
-      if (!w.isActivated && this.elapsed >= w.start) {
+    this.words.forEach((w, i) => {
+      if (!w.isActivated && externalWordIndex >= 0 && i <= externalWordIndex) {
         w.isActivated = true;
       }
       w.update(dt, this.isExiting, this.exitStyle);
-
-      // 寻找当前播发的活动词（光标跟随目标）
-      if (!this.isExiting && this.elapsed >= w.start && this.elapsed <= (w.start + (w.duration || 1000))) {
-         currentActiveWord = w;
-      }
     });
+
+    // 直接用后端 wordIndex 定位光标追踪目标，无需本地时钟估算
+    if (!this.isExiting && externalWordIndex >= 0 && externalWordIndex < this.words.length) {
+      currentActiveWord = this.words[externalWordIndex];
+    }
 
     if (currentActiveWord) {
       this.trackOpacity += (1 - this.trackOpacity) * 0.1;
       
-      const targetW = 20; 
-      
-      // 【关键修复】如果该行是中途切入的第一帧，光标直接“瞬移”到对应词，不要滑行
+      // 【关键修复】如果该行是中途切入的第一帧，光标直接"瞬移"到对应词，不要滑行
       if (this.isFirstUpdate) {
         this.trackX = currentActiveWord.currentX;
         this.trackY = currentActiveWord.currentY;
@@ -300,7 +300,9 @@ class LyricNode {
     if (this.trackOpacity > 0.01) {
       let activeW = 0;
       // 找到当前词计算宽度
-      const activeWord = this.words.find(w => this.elapsed >= w.start && this.elapsed <= (w.start + (w.duration || 1000)));
+      // 直接使用后端驱动的 activeWordIndex，不再用本地时钟估算
+      const activeWord = this.activeWordIndex >= 0 && this.activeWordIndex < this.words.length
+        ? this.words[this.activeWordIndex] : null;
       if (activeWord) {
          activeW = ctx.measureText(activeWord.text).width + 16;
          // 平滑宽度变化
@@ -352,7 +354,9 @@ const renderLoop = (timestamp: number) => {
 
   for (let i = activeNodes.value.length - 1; i >= 0; i--) {
     const node = activeNodes.value[i];
-    node.update(dt);
+    // 离场节点不追踪词语（传 -1）；活跃节点直接用后端实时 wordIndex
+    const wordIdx = node.isExiting ? -1 : playerStore.wordIndex;
+    node.update(dt, wordIdx);
     node.draw(ctx);
     if (node.isExiting && node.opacity < 0.01) {
       activeNodes.value.splice(i, 1);
@@ -361,7 +365,7 @@ const renderLoop = (timestamp: number) => {
   animationId = requestAnimationFrame(renderLoop);
 };
 
-// 监听歌词行变更，注入新粒子
+// 监听歌词行变更（由后端 lyric_line_change 精准驱动），注入新粒子
 watch(() => playerStore.currentLineIndex, (newIdx) => {
   if (!playerStore.enableLyricsAnimation || newIdx === -1) return;
   
@@ -370,12 +374,13 @@ watch(() => playerStore.currentLineIndex, (newIdx) => {
 
   const lineData = lyricsLines[newIdx];
 
-  // 将之前的活跃节点标记为“准备离场”
+  // 将之前的活跃节点标记为"准备离场"
   activeNodes.value.forEach(node => node.isExiting = true);
 
-  // 创建新节点
+  // 用后端 lineProgress 计算行内已走过的时间，而非从头重播
   if (lyricCanvasRef.value && ctx) {
-    const newNode = new LyricNode(lineData, lyricCanvasRef.value.width, lyricCanvasRef.value.height, ctx);
+    const initialElapsed = playerStore.lineProgress * (lineData.duration || 0) * 1000;
+    const newNode = new LyricNode(lineData, lyricCanvasRef.value.width, lyricCanvasRef.value.height, ctx, Math.max(0, initialElapsed));
     activeNodes.value.push(newNode);
   }
 });
@@ -395,8 +400,8 @@ watch(() => playerStore.isFullScreen, (isFull) => {
         const lyricsLines = playerStore.currentTrack?.lyrics?.lines;
         if (currentIdx >= 0 && lyricsLines && lyricsLines[currentIdx] && ctx && lyricCanvasRef.value) {
           const lineData = lyricsLines[currentIdx];
-          // 计算播放偏移量
-          const initialElapsed = (playerStore.currentTime - lineData.start) * 1000;
+          // 用后端 lineProgress 计算行内偏移量，比本地时间差更精准
+          const initialElapsed = playerStore.lineProgress * (lineData.duration || 0) * 1000;
           const node = new LyricNode(
             lineData, 
             lyricCanvasRef.value.width, 

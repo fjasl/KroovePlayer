@@ -30,9 +30,7 @@ class CoreManager {
     this.wss = wss;
   }
 
-  /**
-   * 50ms 极速心跳：负责状态分发和自动切歌
-   */
+
   // 在 CoreManager.js 的 initSync 中：
   initSync() {
     // 1. 高频状态更新 (对应你 C++ 的 StatusUpdate)
@@ -50,7 +48,7 @@ class CoreManager {
           duration: duration,
           // 高频词级进度数据，驱动前端逐字动画，前端无需自己估算
           lineProgress: this.view.getFloat64(48, true), // offset 48
-          wordIndex:    this.view.getInt32(56, true),   // offset 56
+          wordIndex: this.view.getInt32(56, true),   // offset 56
           wordProgress: this.view.getFloat64(64, true), // offset 64
         });
       }
@@ -75,9 +73,9 @@ class CoreManager {
     this.engine.setOnLineChange(() => {
       this.broadcast({
         type: "lyric_line_change",
-        line:         this.view.getInt32(40, true),   // 当前行索引  (offset 40)
+        line: this.view.getInt32(40, true),   // 当前行索引  (offset 40)
         lineProgress: this.view.getFloat64(48, true), // 当前行进度  (offset 48)
-        wordIndex:    this.view.getInt32(56, true),   // 当前字索引  (offset 56)
+        wordIndex: this.view.getInt32(56, true),   // 当前字索引  (offset 56)
         wordProgress: this.view.getFloat64(64, true), // 当前字进度  (offset 64)
       });
     });
@@ -122,8 +120,8 @@ class CoreManager {
       // [Fix] 这里的 currentIndex 已经在 loadAll 中根据 last_played_id 恢复过了
       const lastId = playlist.current();
       if (lastId) {
-         console.log(`🎬 自动恢复上次播放: ID ${lastId}`);
-         this.playById(lastId);
+        console.log(`🎬 自动恢复上次播放: ID ${lastId}`);
+        this.playById(lastId);
       }
     }
   }
@@ -138,10 +136,10 @@ class CoreManager {
     // 同步内存列表
     this.libraryFolders = configManager.get("libraryFolders") || [];
     console.log(`➕ 目录载入成功: ${absolutePath}`);
-    
+
     // 刷新监控
     libraryManager.initWatcher(() => this.syncCurrentState());
-    
+
     playlist.loadAll(); // 库有变更，重载内存队列
     this.broadcast({ type: "library_folders", folders: this.libraryFolders });
     this.broadcast({ type: "full_playlist", list: playlist.getFullList() });
@@ -153,10 +151,10 @@ class CoreManager {
     configManager.removeLibraryFolder(absolutePath);
     this.libraryFolders = configManager.get("libraryFolders") || [];
     console.log(`➖ 目录移除成功: ${absolutePath}`);
-    
+
     // 刷新监控
     libraryManager.initWatcher(() => this.syncCurrentState());
-    
+
     this.broadcast({ type: "library_folders", folders: this.libraryFolders });
     this.broadcast({ type: "queue_ids", ids: playlist.getQueueIds(), isBroadcast: true });
   }

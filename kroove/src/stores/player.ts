@@ -14,6 +14,9 @@ export const usePlayerStore = defineStore('player', () => {
   const isFullScreen = ref(false) // 全屏页面是否展开
   const enableLyricsAnimation = ref(true) // 是否启用 Canvas 随机歌词
   const currentLineIndex = ref(-1)        // 当前播放的歌词行索引
+  const lineProgress = ref(0)             // 当前行播放进度 0.0~1.0 (后端实时同步)
+  const wordIndex = ref(-1)               // 当前字索引 (后端实时同步)
+  const wordProgress = ref(0)             // 当前字进度 0.0~1.0 (后端实时同步)
   
   // 库扫描进度状态
   const scanActive = ref(false)
@@ -74,6 +77,10 @@ export const usePlayerStore = defineStore('player', () => {
           }
           // 只有状态 3 才是明确在播放中，状态 4 是已暂停
           isPlaying.value = (data.state === 3);
+          // 高频同步后端词级进度，驱动前端逐字动画
+          if (data.wordIndex !== undefined) wordIndex.value = data.wordIndex;
+          if (data.wordProgress !== undefined) wordProgress.value = data.wordProgress;
+          if (data.lineProgress !== undefined) lineProgress.value = data.lineProgress;
         }
 
         // 2. 界面元数据刷新 (切歌时传来)
@@ -130,9 +137,12 @@ export const usePlayerStore = defineStore('player', () => {
           }
         }
 
-        // 4. 处理实时歌词行变动
+        // 4. 处理实时歌词行变动（包含行进度和诌d级数据）
         if (data.type === 'lyric_line_change') {
           currentLineIndex.value = data.line;
+          if (data.lineProgress !== undefined) lineProgress.value = data.lineProgress;
+          if (data.wordIndex !== undefined) wordIndex.value = data.wordIndex;
+          if (data.wordProgress !== undefined) wordProgress.value = data.wordProgress;
         }
 
         // 5. 处理库扫描进度
@@ -240,6 +250,9 @@ export const usePlayerStore = defineStore('player', () => {
     metadataMap,
     enableLyricsAnimation,
     currentLineIndex,
+    lineProgress,
+    wordIndex,
+    wordProgress,
     scanActive,
     scanCount,
     searchQuery,
