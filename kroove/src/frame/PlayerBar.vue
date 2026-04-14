@@ -1,6 +1,6 @@
 <!-- src/frame/PlayerBar.vue -->
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { usePlayerStore } from '../stores/player';
 import PlayerButton from '../component/PlayerButton.vue';
 import GrooveSlider from '../component/GrooveSlider.vue';
@@ -22,6 +22,52 @@ import IconVolume1 from '../assets/icons/IconVolume1.vue';
 import IconVolume2 from '../assets/icons/IconVolume2.vue';
 
 const playerStore = usePlayerStore();
+const sampledColor = ref('rgb(37, 37, 40)'); // 默认深灰
+
+const extractColor = (url: string) => {
+  if (!url) {
+    sampledColor.value = 'rgb(37, 37, 40)';
+    return;
+  }
+  
+  const img = new Image();
+  img.crossOrigin = 'Anonymous';
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    canvas.width = 10; // 极小采样，只为获取氛围色
+    canvas.height = 10;
+    ctx.drawImage(img, 0, 0, 10, 10);
+    
+    const data = ctx.getImageData(0, 0, 10, 10).data;
+    let r = 0, g = 0, b = 0;
+    
+    // 简单加权平均：提取氛围
+    for (let i = 0; i < data.length; i += 4) {
+      r += data[i];
+      g += data[i + 1];
+      b += data[i + 2];
+    }
+    
+    const count = data.length / 4;
+    r = Math.floor(r / count);
+    g = Math.floor(g / count);
+    b = Math.floor(b / count);
+
+    // 视觉修正：适当调低亮度与饱和度，确保文字清晰度
+    // 使用简单的模拟 HSL 调整
+    const darken = 0.6; // 60% 亮度
+    sampledColor.value = `rgb(${Math.floor(r * darken)}, ${Math.floor(g * darken)}, ${Math.floor(b * darken)})`;
+  };
+  img.src = url;
+};
+
+// 监听封面变化
+watch(() => playerStore.currentTrack.coverUrl, (newUrl) => {
+  extractColor(newUrl);
+}, { immediate: true });
 
 const handleInfoClick = () => {
   playerStore.toggleFullScreen();
@@ -44,7 +90,7 @@ const currentVolumeIcon = computed(() => {
 </script>
 
 <template>
-  <footer class="player-bar">
+  <footer class="player-bar" :style="{ background: sampledColor }">
     <!-- 左侧：歌曲信息区 -->
     <div class="info-section" @click="handleInfoClick">
       <div class="album-art">
@@ -143,6 +189,7 @@ const currentVolumeIcon = computed(() => {
   z-index: 200;
   overflow: hidden;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 1.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .info-section {
