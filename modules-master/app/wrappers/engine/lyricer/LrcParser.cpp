@@ -195,9 +195,11 @@ bool LrcParser::tryParseWordByWord(const std::string &contentText,
 
     // 根据结束标签立刻算出当前字的精确停留时间
     double endTime = parseTime(match[3].str());
-    // 极致清洗：如果当前“字”的时间太短（比如 0.01s 下一跳就到了）且内容是空白字符，直接无视
+    word.duration = endTime - word.start; // 修复：此前此行缺失，导致 duration 永远为 0
+
+    // 极致清洗：如果当前字的时间太短且内容是纯空白，直接跳过
     if (word.duration < 0.02 && word.text.find_first_not_of(" \t\r\n") == std::string::npos) {
-        continue;
+      continue;
     }
 
     // 将歌词拼接到行的纯文本上

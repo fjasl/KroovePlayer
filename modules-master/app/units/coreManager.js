@@ -48,6 +48,10 @@ class CoreManager {
           state: currentState,
           timePos: timePos,
           duration: duration,
+          // 高频词级进度数据，驱动前端逐字动画，前端无需自己估算
+          lineProgress: this.view.getFloat64(48, true), // offset 48
+          wordIndex:    this.view.getInt32(56, true),   // offset 56
+          wordProgress: this.view.getFloat64(64, true), // offset 64
         });
       }
     });
@@ -67,13 +71,14 @@ class CoreManager {
     });
 
     // 3. 歌词换行更新 (对应你 C++ 的 LineChange)
-    // 负责：精准的歌词同步广播，不需要在进度回调里顺带查歌词了
+    // 负责：精准的歌词同步广播，携带完整的行/词状态，前端直接消费
     this.engine.setOnLineChange(() => {
-      // 这里可以直接从共享内存读取当前行索引，或者直接广播一个换行信号给前端
-      // 这样前端就不需要实时计算哪一行该亮了
       this.broadcast({
         type: "lyric_line_change",
-        line: this.view.getInt32(40, true), // 假设 offset 24 是当前行索引
+        line:         this.view.getInt32(40, true),   // 当前行索引  (offset 40)
+        lineProgress: this.view.getFloat64(48, true), // 当前行进度  (offset 48)
+        wordIndex:    this.view.getInt32(56, true),   // 当前字索引  (offset 56)
+        wordProgress: this.view.getFloat64(64, true), // 当前字进度  (offset 64)
       });
     });
   }
