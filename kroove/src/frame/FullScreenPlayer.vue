@@ -120,12 +120,20 @@ class WordSprite {
     const elapsed = performance.now() - this.activatedTime;
 
     if (!isExiting) {
-      // 组装过程：带 Stagger 延迟的指数衰减
+      // 组放过程：带 Stagger 延迟的指数衰减
       const assemblyElapsed = Math.max(0, elapsed - this.assemblyDelay);
-      const factor = 1 - Math.exp(-assemblyElapsed / 450);
-      this.currentX = this.originX + (this.targetRelX - this.originX) * factor;
-      this.currentY = this.originY + (this.targetRelY - this.originY) * factor;
-      this.opacity = factor;
+      
+      // 【核心修复】如果该词早就该入场了（差距超过 500ms），直接跳过动画进入锁定位置
+      if (assemblyElapsed > 500) {
+        this.currentX = this.targetRelX;
+        this.currentY = this.targetRelY;
+        this.opacity = 1;
+      } else {
+        const factor = 1 - Math.exp(-assemblyElapsed / 450);
+        this.currentX = this.originX + (this.targetRelX - this.originX) * factor;
+        this.currentY = this.targetRelY + (this.targetRelY - this.targetRelY) * factor; // 维持基线
+        this.opacity = factor;
+      }
     } else {
       // 溃散过程
       this.opacity *= 0.9;
@@ -169,11 +177,12 @@ class LyricNode {
   entranceStyle: EntranceStyle;
   exitStyle: ExitStyle;
   elapsed: number = 0;
+  isFirstUpdate: boolean = true;
 
-  constructor(lineData: any, canvasWidth: number, canvasHeight: number, tempCtx: CanvasRenderingContext2D) {
+  constructor(lineData: any, canvasWidth: number, canvasHeight: number, tempCtx: CanvasRenderingContext2D, initialElapsed: number = 0) {
     this.text = lineData.text;
-    this.startTime = performance.now();
-    this.fontSize = 32 + Math.random() * 8;
+    this.startTime = performance.now() - initialElapsed;
+    this.fontSize = 42; 
     
     // 基础中心点
     this.x = canvasWidth / 2;
@@ -255,13 +264,23 @@ class LyricNode {
 
     if (currentActiveWord) {
       this.trackOpacity += (1 - this.trackOpacity) * 0.1;
-      // 这里的 10 和 20 是为了给光标留一点内边距（Padding）
-      const targetW = 20; // 这里的宽度计算需要结合绘制时的 ctx，稍后在 draw 中也会用到
-      // 我们在 draw 中再精确计算宽度，这里先处理坐标的平移
-      this.trackX += (currentActiveWord.currentX - this.trackX) * 0.15 * dt;
-      this.trackY += (currentActiveWord.currentY - this.trackY) * 0.15 * dt;
+      
+      const targetW = 20; 
+      
+      // 【关键修复】如果该行是中途切入的第一帧，光标直接“瞬移”到对应词，不要滑行
+      if (this.isFirstUpdate) {
+        this.trackX = currentActiveWord.currentX;
+        this.trackY = currentActiveWord.currentY;
+        this.isFirstUpdate = false; 
+      } else {
+        // 增加安全检查，防止 dt 异常
+        const safeDt = Number.isFinite(dt) ? dt : 1;
+        this.trackX += (currentActiveWord.currentX - this.trackX) * 0.15 * safeDt;
+        this.trackY += (currentActiveWord.currentY - this.trackY) * 0.15 * safeDt;
+      }
     } else {
       this.trackOpacity *= 0.9;
+      this.isFirstUpdate = false;
     }
   }
 
@@ -324,8 +343,10 @@ const initCanvas = () => {
 const renderLoop = (timestamp: number) => {
   if (!ctx || !lyricCanvasRef.value) return;
   
-  const dt = (timestamp - lastTimestamp) / 16.67; // 标准化 dt (假设 60fps 为 1)
-  lastTimestamp = timestamp;
+  // 【核心修复】增加容错，防止通过 renderLoop() 手动调用时 timestamp 为 undefined 导致 dt 为 NaN
+  const safeTimestamp = timestamp || performance.now();
+  const dt = (safeTimestamp - lastTimestamp) / 16.67;
+  lastTimestamp = safeTimestamp;
 
   ctx.clearRect(0, 0, lyricCanvasRef.value.width, lyricCanvasRef.value.height);
 
@@ -359,18 +380,48 @@ watch(() => playerStore.currentLineIndex, (newIdx) => {
   }
 });
 
+// 【核心重构】合并所有全屏状态监听器，确保逻辑顺序：初始化 -> 状态对齐 -> 启动循环 -> 计时器管理
 watch(() => playerStore.isFullScreen, (isFull) => {
   if (isFull) {
+    // 1. 重置闲置计时器
+    resetIdleTimer();
+    
+    // 2. 延迟初始化画布（等待 DOM 过渡完成）
     setTimeout(() => {
         initCanvas();
-        if (!animationId) renderLoop();
-    }, 100);
+        
+        // 3. 立即提取并校准当前歌词行
+        const currentIdx = playerStore.currentLineIndex;
+        const lyricsLines = playerStore.currentTrack?.lyrics?.lines;
+        if (currentIdx >= 0 && lyricsLines && lyricsLines[currentIdx] && ctx && lyricCanvasRef.value) {
+          const lineData = lyricsLines[currentIdx];
+          // 计算播放偏移量
+          const initialElapsed = (playerStore.currentTime - lineData.start) * 1000;
+          const node = new LyricNode(
+            lineData, 
+            lyricCanvasRef.value.width, 
+            lyricCanvasRef.value.height, 
+            ctx, 
+            Math.max(0, initialElapsed)
+          );
+          activeNodes.value = [node];
+        }
+
+        // 4. 安全启动渲染主循环
+        if (!animationId) {
+          lastTimestamp = performance.now();
+          animationId = requestAnimationFrame(renderLoop);
+        }
+    }, 150);
   } else {
+    // 退出逻辑
     if (animationId) {
       cancelAnimationFrame(animationId);
       animationId = null;
     }
     activeNodes.value = [];
+    isIdle.value = false;
+    if (idleTimer) clearTimeout(idleTimer);
   }
 });
 
@@ -381,15 +432,6 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', initCanvas);
   if (animationId) cancelAnimationFrame(animationId);
-});
-
-watch(() => playerStore.isFullScreen, (newVal) => {
-  if (newVal) {
-    resetIdleTimer();
-  } else {
-    isIdle.value = false;
-    if (idleTimer) clearTimeout(idleTimer);
-  }
 });
 </script>
 
