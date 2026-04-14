@@ -65,8 +65,23 @@ class NetworkManager {
         res.status(500).json({ error: e.message });
       }
     });
+    
+    // 3. 获取当前播放队列的完整 ID 序列 (轻量级)
+    this.app.get("/api/playlist/ids", (req, res) => {
+      res.json(this.core.playlist.getQueueIds());
+    });
 
-    // 3. 基础健康检查
+    // 4. 批量获取曲目详情 (推荐虚拟列表滚动时使用)
+    this.app.post("/api/track/batch", (req, res) => {
+      const { ids } = req.body;
+      if (!ids || !Array.isArray(ids)) {
+        return res.status(400).json({ error: "Missing or invalid ids array" });
+      }
+      const details = this.core.playlist.getDetailsBatch(ids);
+      res.json(details);
+    });
+
+    // 5. 基础健康检查
     this.app.get("/status", (req, res) => {
       res.json({
         status: "running",

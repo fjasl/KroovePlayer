@@ -51,6 +51,18 @@ class PlaylistManager {
         return this.fullData;
     }
 
+    // [New] 获取当前完整 ID 序列 (轻量级索引)
+    getQueueIds() {
+        return this.queue;
+    }
+
+    // [New] 批量获取指定 ID 的元数据详情
+    getDetailsBatch(ids) {
+        // 使用 Map 进行快速查找，避免在 fullData 中反复遍历
+        const dataMap = new Map(this.fullData.map(item => [item.id, item]));
+        return ids.map(id => dataMap.get(id)).filter(item => !!item);
+    }
+
     next(isAuto = false) {
         if (this.queue.length === 0) return null;
 

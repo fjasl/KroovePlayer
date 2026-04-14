@@ -5,7 +5,7 @@ export const usePlayerStore = defineStore('player', () => {
   const isPlaying = ref(false)
   const isShuffle = ref(false)
   const isRepeat = ref(false)
-  const volume = ref(70)
+  const volume = ref(0)
   const isMuted = ref(false)
 
   const currentTime = ref(0)
@@ -29,8 +29,13 @@ export const usePlayerStore = defineStore('player', () => {
   // 监控的库目录列表
   const libraryFolders = ref<string[]>([])
 
-  // 全量曲目池
+  // 全量曲目池 (旧的，兼容用)
   const fullPlaylist = ref<any[]>([])
+
+  // [New] 虚拟列表支持：全量 ID 序列
+  const queueIds = ref<number[]>([])
+  // [New] 虚拟列表支持：元数据缓存池 (ID -> Metadata)
+  const metadataMap = reactive<Map<number, any>>(new Map())
 
   // 全局 socket 管理
   let ws: WebSocket | null = null;
@@ -80,9 +85,21 @@ export const usePlayerStore = defineStore('player', () => {
           libraryFolders.value = data.folders || [];
         }
 
-        // 4. 全量曲库大全刷新
+        // 4. 全量曲库刷新 (旧版本)
         if (data.type === 'full_playlist') {
           fullPlaylist.value = data.list || [];
+          // 同时填充缓存
+          data.list?.forEach((item: any) => metadataMap.set(item.id, item));
+        }
+
+        // [New] 4.1 轻量级 ID 序列刷新
+        if (data.type === 'queue_ids') {
+          queueIds.value = data.ids || [];
+        }
+
+        // [New] 4.2 批量详情回流
+        if (data.type === 'batch_details') {
+          data.details?.forEach((item: any) => metadataMap.set(item.id, item));
         }
         // 5. 播放器配置刷新
         if (data.type === 'player_config') {
@@ -146,6 +163,25 @@ export const usePlayerStore = defineStore('player', () => {
   const addFolder = (path: string) => sendCommand({ cmd: 'add_folder', path });
   const removeFolder = (path: string) => sendCommand({ cmd: 'remove_folder', path });
 
+  // [New] 批量拉取元数据
+  const fetchBatchMetadata = async (ids: number[]) => {
+    // 过滤掉已经缓存过的 ID
+    const missingIds = ids.filter(id => !metadataMap.has(id));
+    if (missingIds.length === 0) return;
+
+    try {
+      const response = await fetch('http://127.0.0.1:6344/api/track/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: missingIds })
+      });
+      const details = await response.json();
+      details.forEach((item: any) => metadataMap.set(item.id, item));
+    } catch (e) {
+      console.error('Failed to fetch batch metadata:', e);
+    }
+  }
+
   // 供进度条拖拽组件调用，避免进度被频发心跳修正
   const setDragging = (state: boolean) => isDraggingProgress = state;
 
@@ -169,8 +205,11 @@ export const usePlayerStore = defineStore('player', () => {
     windowPlaylist,
     libraryFolders,
     fullPlaylist,
+    queueIds,
+    metadataMap,
 
     initConnection,
+    fetchBatchMetadata,
     togglePlay,
     playNext,
     playPrev,

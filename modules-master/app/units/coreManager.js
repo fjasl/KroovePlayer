@@ -14,6 +14,7 @@ class CoreManager {
     this.lastState = -1;
     this.lastLayout = null; // 缓存最新歌词，供后来连入的客户端同步
     this.libraryFolders = []; // 实时维护监控目录列表
+    this.playlist = playlist;
 
     // 锁定引用防止被 GC
     global._engineRef = this.engine;
@@ -222,6 +223,11 @@ class CoreManager {
       volume: configManager.get('volume'),
       playbackMode: playlist.mode // 从 playlistManager 获取当前模式
     });
+    // [New] 下发轻量级 ID 序列，供前端虚拟列表索引
+    this.broadcast({
+      type: "queue_ids",
+      ids: playlist.getQueueIds()
+    });
   }
   // coreManager.js
   async updateTrackManual(id, data) {
@@ -275,6 +281,15 @@ class CoreManager {
         break;
       case "remove_folder":
         this.removeLibraryFolder(cmd.path);
+        break;
+      case "get_batch_details":
+        // 允许通过指令批量获取详情 (WebSocket 渠道)
+        if (cmd.ids && Array.isArray(cmd.ids)) {
+          this.broadcast({
+            type: "batch_details",
+            details: playlist.getDetailsBatch(cmd.ids)
+          });
+        }
         break;
     }
   }

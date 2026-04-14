@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import SongListItem from '../component/SongListItem.vue'
+import GrooveVirtualList from '../component/GrooveVirtualList.vue'
 import EmptyState from '../component/EmptyState.vue'
 import SettingsView from '../component/SettingsView.vue'
 import { usePlayerStore } from '../stores/player'
@@ -47,15 +48,22 @@ const formatTime = (seconds: number) => {
           </div>
 
           <div class="song-list" v-else>
-            <SongListItem v-for="song in playerStore.fullPlaylist" 
-              :key="song.id" 
-              :id="song.id"
-              :title="song.title" 
-              :artist="song.artist"
-              :album="song.album" 
-              :genre="song.genre || '未知流派'" 
-              :duration="formatTime(song.duration)" 
-              :isActive="playerStore.currentTrack.id === song.id" />
+            <GrooveVirtualList :item-height="52" :buffer="5">
+              <template #default="{ item, id }">
+                <!-- 如果详情还没加载回来，显示一个高度占位，避免列表抽动 -->
+                <div v-if="!item" class="song-item-loading" style="height: 52px; opacity: 0.1; background: #fff; margin: 4px 0; border-radius: 4px;"></div>
+                
+                <SongListItem v-else
+                  :key="id" 
+                  :id="item.id"
+                  :title="item.title" 
+                  :artist="item.artist"
+                  :album="item.album" 
+                  :genre="item.genre || '未知流派'" 
+                  :duration="formatTime(item.duration)" 
+                  :isActive="playerStore.currentTrack.id === item.id" />
+              </template>
+            </GrooveVirtualList>
           </div>
         </section>
 
