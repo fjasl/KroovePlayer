@@ -77,7 +77,19 @@ class WordSprite {
   start: number;
   duration: number;
   opacity: number = 0;
+  
+  // 散点定位系统
+  targetRelX: number = 0; // 相对于行中心的最终 X
+  targetRelY: number = 0; // 相对于行基线的最终 Y
+  originX: number = 0;    // 组装起点 X
+  originY: number = 0;    // 组装起点 Y
+  
+  currentX: number = 0;
+  currentY: number = 0;
+
   isActivated: boolean = false;
+  activatedTime: number = 0;
+  assemblyDelay: number = 0; // 每个点独立的起步延迟
 
   constructor(text: string, start: number, duration: number) {
     this.text = text;
@@ -85,14 +97,52 @@ class WordSprite {
     this.duration = duration;
   }
 
-  update(dt: number) {
+  // 初始化组装起点（根据风格决定从哪里飞过来）
+  initOrigin(style: EntranceStyle) {
+    const range = 150;
+    if (style === 'BLAST') {
+       this.originX = this.targetRelX * 2;
+       this.originY = this.targetRelY * 2;
+    } else if (style === 'GLIDE_UP') {
+       this.originX = this.targetRelX;
+       this.originY = this.targetRelY + range;
+    } else {
+       this.originX = this.targetRelX + (Math.random() - 0.5) * range;
+       this.originY = this.targetRelY + (Math.random() - 0.5) * range;
+    }
+    this.currentX = this.originX;
+    this.currentY = this.originY;
+  }
+
+  update(dt: number, isExiting: boolean, exitStyle: ExitStyle) {
     if (!this.isActivated) return;
-    this.opacity += (1 - this.opacity) * 0.2 * dt;
+    if (this.activatedTime === 0) this.activatedTime = performance.now();
+    const elapsed = performance.now() - this.activatedTime;
+
+    if (!isExiting) {
+      // 组装过程：带 Stagger 延迟的指数衰减
+      const assemblyElapsed = Math.max(0, elapsed - this.assemblyDelay);
+      const factor = 1 - Math.exp(-assemblyElapsed / 450);
+      this.currentX = this.originX + (this.targetRelX - this.originX) * factor;
+      this.currentY = this.originY + (this.targetRelY - this.originY) * factor;
+      this.opacity = factor;
+    } else {
+      // 溃散过程
+      this.opacity *= 0.9;
+      if (exitStyle === 'SHATTER') {
+         this.currentY += 5;
+         this.currentX += (Math.random() - 0.5) * 4;
+      } else {
+         this.currentX += (this.targetRelX) * 0.1;
+         this.currentY += (this.targetRelY) * 0.1;
+      }
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D, baseOpacity: number) {
-    if (!this.isActivated) return;
+    if (!this.isActivated && this.opacity < 0.01) return;
     ctx.save();
+    ctx.translate(this.currentX, this.currentY);
     ctx.globalAlpha = baseOpacity * this.opacity;
     ctx.fillText(this.text, 0, 0);
     ctx.restore();
@@ -103,14 +153,10 @@ class LyricNode {
   text: string;
   words: WordSprite[] = [];
   startTime: number;
-  lineDuration: number;
   x: number;
   y: number;
   opacity: number = 0;
-  scale: number = 1.0;
   rotation: number = 0;
-  vx: number = 0;
-  vy: number = 0;
   isExiting: boolean = false;
   fontSize: number;
   
@@ -118,92 +164,74 @@ class LyricNode {
   exitStyle: ExitStyle;
   elapsed: number = 0;
 
-  constructor(lineData: any, canvasWidth: number, canvasHeight: number) {
+  constructor(lineData: any, canvasWidth: number, canvasHeight: number, tempCtx: CanvasRenderingContext2D) {
     this.text = lineData.text;
-    this.lineDuration = lineData.duration || 3.0;
     this.startTime = performance.now();
-    this.fontSize = 32 + Math.random() * 10;
+    this.fontSize = 32 + Math.random() * 8;
     
-    // 随机位置与轨迹
-    this.x = canvasWidth / 2 + (Math.random() - 0.5) * canvasWidth * 0.4;
-    this.y = canvasHeight / 2 + (Math.random() - 0.5) * canvasHeight * 0.2;
+    // 基础中心点
+    this.x = canvasWidth / 2;
+    this.y = canvasHeight / 2 + (Math.random() - 0.5) * 40;
     
-    // 随机分配出场与离场风格
+    // 随机风格
     const entrances: EntranceStyle[] = ['BLAST', 'GLIDE_UP', 'ZOOM_IN', 'ROLL_IN'];
     const exits: ExitStyle[] = ['SMOKE', 'SHATTER', 'VORTEX', 'FLIP_OUT'];
-    
     this.entranceStyle = entrances[Math.floor(Math.random() * entrances.length)];
     this.exitStyle = exits[Math.floor(Math.random() * exits.length)];
 
-    // 预设逐字数据
+    // 【核心核心】散点布局算法
     if (lineData.words && lineData.words.length > 0) {
-      this.words = lineData.words.map((w: any) => 
-        new WordSprite(w.text, (w.start - lineData.start) * 1000, w.duration * 1000)
-      );
-    }
+      tempCtx.font = `bold ${this.fontSize}px sans-serif`;
+      
+      let totalW = 0;
+      const wordWidths: number[] = [];
+      const gaps: number[] = [];
+      
+      // 1. 预计算总宽度和随机间距
+      lineData.words.forEach((w: any) => {
+        const wWidth = tempCtx.measureText(w.text).width;
+        wordWidths.push(wWidth);
+        const gap = 12 + Math.random() * 20; // 散乱间距
+        gaps.push(gap);
+        totalW += wWidth + gap;
+      });
+      totalW -= gaps[gaps.length - 1];
 
-    // 根据不同风格初始化物理属性
-    if (this.entranceStyle === 'BLAST') {
-      this.scale = 0.2;
-      this.opacity = 0;
-    } else if (this.entranceStyle === 'GLIDE_UP') {
-      this.y += 120;
-      this.opacity = 0;
-    } else if (this.entranceStyle === 'ROLL_IN') {
-      this.x -= 200;
-      this.rotation = -Math.PI / 4;
-      this.opacity = 0;
+      // 2. 赋予每个词独立的散点坐标
+      let currentX = -totalW / 2;
+      this.words = lineData.words.map((w: any, i: number) => {
+        const sprite = new WordSprite(w.text, (w.start - lineData.start) * 1000, w.duration * 1000);
+        sprite.targetRelX = currentX + wordWidths[i] / 2;
+        sprite.targetRelY = (Math.random() - 0.5) * 30; // 随机基线错位
+        sprite.initOrigin(this.entranceStyle);
+        sprite.assemblyDelay = Math.random() * 200; // 0~200ms 的随机起跳延迟
+        currentX += wordWidths[i] + gaps[i];
+        return sprite;
+      });
+    } else {
+      // 兼容非逐字行
+      const sprite = new WordSprite(this.text, 0, 3000);
+      sprite.targetRelX = 0;
+      sprite.targetRelY = 0;
+      sprite.initOrigin(this.entranceStyle);
+      sprite.isActivated = true;
+      this.words = [sprite];
     }
   }
 
   update(dt: number) {
     this.elapsed = performance.now() - this.startTime;
 
-    // 1. 物理运动
-    this.x += this.vx * dt;
-    this.y += this.vy * dt;
+    // 基础透明度渐入
+    this.opacity += (1 - this.opacity) * 0.1;
 
-    // 2. 出场动画处理
-    if (!this.isExiting) {
-      this.opacity += (1 - this.opacity) * 0.08;
-      if (this.entranceStyle === 'BLAST') {
-        this.scale += (1 - this.scale) * 0.12;
-      } else if (this.entranceStyle === 'GLIDE_UP') {
-        const timeFactor = Math.exp(-(this.elapsed) / 500); // 指数衰减滑动
-        this.y -= 3 * timeFactor * dt; 
-      } else if (this.entranceStyle === 'ZOOM_IN') {
-        this.scale += (1 - this.scale) * 0.08;
-      } else if (this.entranceStyle === 'ROLL_IN') {
-        this.x += (window.innerWidth / 2 - this.x) * 0.1;
-        this.rotation *= 0.9;
-      }
-    } else {
-      // 3. 离场动画处理 (多种风格)
-      this.opacity *= 0.92;
-      if (this.exitStyle === 'SMOKE') {
-        this.vy -= 0.1;
-        this.vx += (Math.random() - 0.5) * 0.2;
-      } else if (this.exitStyle === 'SHATTER') {
-        this.vy += 0.3; // 坠落
-        this.rotation += 0.05;
-      } else if (this.exitStyle === 'VORTEX') {
-        this.rotation += 0.25;
-        this.scale *= 0.94;
-        this.x += (window.innerWidth/2 - this.x) * 0.05;
-        this.y += (window.innerHeight/2 - this.y) * 0.05;
-      } else if (this.exitStyle === 'FLIP_OUT') {
-        this.rotation += 0.2;
-        this.scale *= 0.92;
-        this.y += 5;
-      }
-    }
-
-    // 4. 逐字逻辑：仅计算淡入且不再有其他物理变动
+    // 驱动所有子级散点
     this.words.forEach(w => {
-      if (this.elapsed >= w.start) {
+      // 如果还没到该词的出场时间，检查是否应激活
+      if (!w.isActivated && this.elapsed >= w.start) {
         w.isActivated = true;
-        w.update(dt);
       }
+      w.update(dt, this.isExiting, this.exitStyle);
     });
   }
 
@@ -211,30 +239,16 @@ class LyricNode {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.rotation);
-    ctx.scale(this.scale, this.scale);
     ctx.globalAlpha = Math.max(0, this.opacity);
     
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-    ctx.shadowBlur = 15;
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+    ctx.shadowBlur = 12;
     ctx.font = `bold ${this.fontSize}px sans-serif`;
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
 
-    if (this.words.length > 0) {
-      // 逐字渲染模式
-      let currentX = -ctx.measureText(this.text).width / 2;
-      this.words.forEach(w => {
-          const wWidth = ctx.measureText(w.text).width;
-          ctx.save();
-          ctx.translate(currentX + wWidth / 2, 0);
-          w.draw(ctx, this.opacity);
-          ctx.restore();
-          currentX += wWidth;
-      });
-    } else {
-      // 普通行模式
-      ctx.fillText(this.text, 0, 0);
-    }
+    // 委派给每个词自己的绘制逻辑
+    this.words.forEach(w => w.draw(ctx, this.opacity));
     
     ctx.restore();
   }
@@ -276,14 +290,14 @@ watch(() => playerStore.currentLineIndex, (newIdx) => {
   const lyricsLines = playerStore.currentTrack?.lyrics?.lines;
   if (!lyricsLines || !lyricsLines[newIdx]) return;
 
-  const lineData = lyricsLines[newIdx]; // [Fix] 这里的实例化需要整行数据，包含文字和逐字属性
+  const lineData = lyricsLines[newIdx];
 
   // 将之前的活跃节点标记为“准备离场”
   activeNodes.value.forEach(node => node.isExiting = true);
 
   // 创建新节点
-  if (lyricCanvasRef.value) {
-    const newNode = new LyricNode(lineData, lyricCanvasRef.value.width, lyricCanvasRef.value.height);
+  if (lyricCanvasRef.value && ctx) {
+    const newNode = new LyricNode(lineData, lyricCanvasRef.value.width, lyricCanvasRef.value.height, ctx);
     activeNodes.value.push(newNode);
   }
 });
