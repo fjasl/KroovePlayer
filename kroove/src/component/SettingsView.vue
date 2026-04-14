@@ -12,7 +12,6 @@ const autoRetrieve = ref(true)
 const artistLockScreen = ref(false)
 const artistWallpaper = ref(false)
 
-const themeMode = ref('system')
 const showLocationDialog = ref(false)
 
 function openLocationDialog() {
@@ -61,9 +60,9 @@ function openLocationDialog() {
 
         <section class="settings-section">
           <h2>模式</h2>
-          <GrooveRadio v-model="themeMode" value="light" label="浅色" />
-          <GrooveRadio v-model="themeMode" value="dark" label="深色" />
-          <GrooveRadio v-model="themeMode" value="system" label="使用系统设置" />
+          <GrooveRadio v-model="playerStore.themeMode" value="light" label="浅色" />
+          <GrooveRadio v-model="playerStore.themeMode" value="dark" label="深色" />
+          <GrooveRadio v-model="playerStore.themeMode" value="system" label="使用系统设置" />
         </section>
 
       </div>
@@ -93,18 +92,18 @@ function openLocationDialog() {
 
 <style scoped>
 .settings-view {
-  color: #fff;
+  color: var(--text-primary);
   flex: 1;
-  /* 去除自身的滚动条，由外层 MainContent 统一负责滚动 */
 }
 
 /* 吸顶的大标题 */
 header {
   position: sticky;
   top: 0;
-  background: #000; /* 改回纯黑，不透明 */
+  background: var(--bg-header); 
   z-index: 10;
-  padding: 40px 40px 0 40px; /* 改将边距加在内部 */
+  padding: 40px 40px 0 40px;
+  transition: background 0.3s ease;
 }
 
 header h1 {
@@ -116,7 +115,7 @@ header h1 {
 .settings-container {
   display: flex;
   gap: 120px;
-  padding: 0 40px 40px 40px; /* 内容自身保护自己的边距 */
+  padding: 0 40px 40px 40px;
 }
 
 .settings-column {
@@ -142,7 +141,7 @@ header h1 {
 
 .description {
   font-size: 14px;
-  color: #ccc;
+  color: var(--text-secondary);
   margin-bottom: 12px;
 }
 

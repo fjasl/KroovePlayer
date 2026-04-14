@@ -122,7 +122,7 @@ onUnmounted(() => {
   left: 0;
   top: 0;
   height: 100%;
-  background: #fff;
+  background: #ffffff;
   border-radius: 1px;
 }
 
@@ -144,21 +144,21 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   z-index: 10;
-  opacity: 1; /* 始终可见 */
+  opacity: 1; 
 }
 
 .thumb-core {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid white;
+  border: 2px solid #ffffff;
   background: transparent;
   box-sizing: border-box;
   transition: background 0.1s, transform 0.1s;
 }
 
 .is-dragging .thumb-core {
-  background: white;
+  background: #ffffff;
   border: none;
   transform: scale(1.1);
 }

@@ -73,19 +73,20 @@ const handleSearch = () => {
 }
 
 .search-box:hover {
-  background: rgba(255, 255, 255, 0.08); /* 悬浮效果与普通项一致 */
+  background: var(--hover-bg); 
 }
 
 /* 延展开后的视觉边距优化 */
 .is-expanded-container .search-box {
-  height: 32px;  /* 延展态视觉高度 */
-  margin: 0 12px; /* 这里是你要的延展开后的边距 */
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  height: 32px;  
+  margin: 0 12px; 
+  background: var(--hover-bg);
+  border: 1px solid var(--border-color);
 }
 
 .is-expanded-container .search-box:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--hover-bg);
+  filter: brightness(0.95);
 }
 
 /* 激活（有焦点）时的特定样式 */
@@ -97,7 +98,7 @@ const handleSearch = () => {
 .search-input {
   background: transparent;
   border: none;
-  color: white;
+  color: var(--text-primary);
   padding: 0 40px 0 10px;
   width: 100%;
   height: 100%;
@@ -137,8 +138,8 @@ const handleSearch = () => {
 .search-icon {
   width: 16px;
   height: 16px;
-  color: #ccc;
+  color: var(--text-secondary);
 }
 
-.is-dark { color: #333; }
+.is-dark { color: #111; }
 </style>

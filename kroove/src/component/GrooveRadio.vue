@@ -40,7 +40,7 @@ const emit = defineEmits<{
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 2px solid #ccc;
+  border: 2px solid var(--border-color);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -48,7 +48,7 @@ const emit = defineEmits<{
   box-sizing: border-box;
 }
 .groove-radio-wrapper:hover .groove-radio {
-  border-color: #fff;
+  border-color: var(--text-primary);
 }
 .hidden-input:checked + .groove-radio {
   border-color: #0078d4;
@@ -66,7 +66,7 @@ const emit = defineEmits<{
   transform: scale(1);
 }
 .groove-radio-label {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 14px;
   user-select: none;
 }

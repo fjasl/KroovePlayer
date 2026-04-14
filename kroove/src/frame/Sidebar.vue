@@ -87,13 +87,13 @@ onUnmounted(() => {
   left: 0;
   height: calc(100vh - 80px);
   width: 48px;
-  background: rgba(25, 25, 25, 0.9);
+  background: var(--bg-sidebar);
   backdrop-filter: blur(30px);
   z-index: 100;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease, border-color 0.3s ease;
   overflow: hidden;
-  color: white;
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border-right: 1px solid var(--border-color);
   
   display: flex;
   flex-direction: column;
@@ -101,7 +101,7 @@ onUnmounted(() => {
 
 .sidebar.is-expanded {
   width: 280px;
-  box-shadow: 10px 0 40px rgba(0, 0, 0, 0.6);
+  box-shadow: 10px 0 40px rgba(0, 0, 0, 0.2);
 }
 
 .hamburger-container {
@@ -116,7 +116,7 @@ onUnmounted(() => {
 }
 
 .hamburger-container:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-bg);
 }
 
 .icon-box {
@@ -128,7 +128,7 @@ onUnmounted(() => {
 }
 
 .nav-links {
-  margin-top: 0; /* 修正：移除缝隙，形成连续侧边条 */
+  margin-top: 0; 
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;

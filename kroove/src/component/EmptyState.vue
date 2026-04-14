@@ -23,18 +23,18 @@ defineProps<{
   align-items: center;
   justify-content: center;
   height: 400px;
-  color: #888;
+  color: var(--text-secondary);
   text-align: center;
 }
 
 .icon {
   margin-bottom: 20px;
-  color: #555;
+  color: var(--text-secondary);
 }
 
 .message {
   font-size: 16px;
-  color: #fff;
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 

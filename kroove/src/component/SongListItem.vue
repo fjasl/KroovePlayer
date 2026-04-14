@@ -70,20 +70,22 @@ const handlePlay = (e: Event) => {
   align-items: center;
   height: 52px;
   cursor: default;
-  color: #ccc;
+  color: var(--text-secondary);
   font-size: 14px;
   background: transparent;
   transition: background 0.1s;
 }
 
-/* 图2的奇偶背景交替 (斑马线效果) */
+/* 斑马线效果 */
 .song-list-item:nth-child(even) {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--hover-bg);
+  opacity: 0.8;
 }
 
-/* 图3的 Hover 高亮背景 */
+/* Hover 高亮背景 */
 .song-list-item:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--hover-bg);
+  opacity: 1;
 }
 
 .song-list-item.active {
@@ -101,17 +103,17 @@ const handlePlay = (e: Event) => {
   align-items: center;
   flex: 0 0 35%;
   position: relative;
-  padding-left: 48px;  /* 预留 checkbox 的位置，保证静止和hover时文字不位移 */
+  padding-left: 48px; 
   padding-right: 16px;
   height: 100%;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .song-list-item.active .title-col {
   color: #0078d4;
 }
 
-/* 左侧多选框 (静止时隐藏，Hover时浮现) */
+/* 左侧多选框 */
 .checkbox-area {
   position: absolute;
   left: 16px;
@@ -119,7 +121,7 @@ const handlePlay = (e: Event) => {
   align-items: center;
   justify-content: center;
   opacity: 0;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .song-list-item:hover .checkbox-area {
@@ -127,18 +129,18 @@ const handlePlay = (e: Event) => {
 }
 
 .text {
-  flex: 0 1 auto; /* 允许收缩，但不强行撑满，使得后面的按钮能紧贴着文字 */
+  flex: 0 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 悬浮操作按钮区，紧贴在文字后方 */
+/* 悬浮操作按钮区 */
 .hover-actions {
   display: none;
   align-items: center;
   gap: 4px;
-  margin-left: 16px; /* 和文字保持一点距离 */
+  margin-left: 16px;
   flex-shrink: 0;
 }
 
@@ -149,7 +151,7 @@ const handlePlay = (e: Event) => {
 .action-btn {
   background: transparent;
   border: none;
-  color: #fff;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -160,21 +162,14 @@ const handlePlay = (e: Event) => {
   transition: background 0.1s;
 }
 
-/* 图3表现出播放按钮带有独立的底色 (仅在真正hover到该按钮时出现) */
 .play-btn {
   background: transparent;
 }
 
-.play-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.add-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
+.play-btn:hover,
+.add-btn:hover,
 .edit-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--hover-bg);
 }
 
 .artist {

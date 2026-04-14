@@ -29,14 +29,14 @@ defineProps<{
   align-items: center;
   cursor: pointer;
   white-space: nowrap;
-  color: #ccc;
+  color: var(--text-secondary);
   transition: all 0.2s ease-in-out;
   position: relative;
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--hover-bg);
+  color: var(--text-primary);
 }
 
 .nav-item.active::before {
@@ -50,8 +50,8 @@ defineProps<{
 }
 
 .nav-item.active {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: var(--hover-bg);
+  color: var(--text-primary);
 }
 
 .icon-container {

@@ -22,11 +22,11 @@ import IconVolume1 from '../assets/icons/IconVolume1.vue';
 import IconVolume2 from '../assets/icons/IconVolume2.vue';
 
 const playerStore = usePlayerStore();
-const sampledColor = ref('rgb(37, 37, 40)'); // 默认深灰
+const sampledColor = ref('var(--bg-playerbar)'); 
 
 const extractColor = (url: string) => {
   if (!url) {
-    sampledColor.value = 'rgb(37, 37, 40)';
+    sampledColor.value = 'var(--bg-playerbar)';
     return;
   }
   
@@ -56,10 +56,18 @@ const extractColor = (url: string) => {
     g = Math.floor(g / count);
     b = Math.floor(b / count);
 
-    // 视觉修正：适当调低亮度与饱和度，确保文字清晰度
-    // 使用简单的模拟 HSL 调整
-    const darken = 0.6; // 60% 亮度
-    sampledColor.value = `rgb(${Math.floor(r * darken)}, ${Math.floor(g * darken)}, ${Math.floor(b * darken)})`;
+    // 计算感知亮度 (Rec. 601)
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+    
+    // 动态对比度修正：强制保持暗色色调
+    let factor = 0.5; // 默认 50%
+    if (luminance > 120) {
+      factor = 0.3; // 如果图太亮，则压到 30% 分度
+    } else if (luminance < 50) {
+      factor = 0.9; // 如果图本来就很暗，则保留色彩
+    }
+
+    sampledColor.value = `rgb(${Math.floor(r * factor)}, ${Math.floor(g * factor)}, ${Math.floor(b * factor)})`;
   };
   img.src = url;
 };
@@ -181,14 +189,14 @@ const currentVolumeIcon = computed(() => {
   left: 0;
   right: 0;
   height: 80px;
-  background: #252528;
+  background: var(--bg-playerbar);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #fff;
+  color: #ffffff; /* 锁定白色，适配氛围背景 */
   z-index: 200;
   overflow: hidden;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   transition: background 1.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -240,7 +248,7 @@ const currentVolumeIcon = computed(() => {
 
 .artist {
   font-size: 12px;
-  color: #ccc;
+  color: rgba(255, 255, 255, 0.6);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -281,7 +289,7 @@ const currentVolumeIcon = computed(() => {
 
 .time {
   font-size: 11px;
-  color: #aaa;
+  color: rgba(255, 255, 255, 0.5);
   width: 32px;
   text-align: center;
 }

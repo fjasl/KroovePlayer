@@ -92,24 +92,24 @@ function addFolder() {
 }
 
 .dialog-content {
-  background-color: #000;
+  background-color: var(--bg-main);
   border: 1px solid #0078d4;
   width: 400px;
   padding: 30px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .dialog-content h2 {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 22px;
   font-weight: 400;
   margin: 0 0 12px 0;
 }
 
 .subtitle {
-  color: #ccc;
+  color: var(--text-secondary);
   font-size: 14px;
   margin: 0 0 24px 0;
 }
@@ -121,20 +121,20 @@ function addFolder() {
   margin-bottom: 40px;
   max-height: 50vh;
   overflow-y: auto;
-  padding-right: 4px; /* 预留一点空间给潜在的滚动条 */
+  padding-right: 4px; 
 }
 
-/* 隐藏细微的内部滚动条 */
+/* 轨道样式适配 */
 .folder-list::-webkit-scrollbar {
   width: 4px;
 }
 .folder-list::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: var(--border-color);
   border-radius: 4px;
 }
 
 .add-folder-box {
-  background-color: #2d2d2d;
+  background-color: var(--hover-bg);
   min-height: 80px;
   border: none;
   cursor: pointer;
@@ -145,21 +145,17 @@ function addFolder() {
 }
 
 .add-folder-box:hover {
-  background-color: #3d3d3d;
-}
-
-.add-folder-box:active {
-  background-color: #4d4d4d;
+  filter: brightness(0.9);
 }
 
 .plus-icon {
   width: 32px;
   height: 32px;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .folder-item {
-  background-color: #2d2d2d;
+  background-color: var(--hover-bg);
   padding: 16px;
   display: flex;
   justify-content: space-between;
@@ -168,7 +164,7 @@ function addFolder() {
 }
 
 .folder-item:hover {
-  background-color: #333333;
+  filter: brightness(0.9);
 }
 
 .folder-info {
@@ -179,13 +175,13 @@ function addFolder() {
 }
 
 .folder-name {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 15px;
   font-weight: 600;
 }
 
 .folder-path {
-  color: #aaa;
+  color: var(--text-secondary);
   font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
@@ -195,7 +191,7 @@ function addFolder() {
 .remove-btn {
   background: transparent;
   border: none;
-  color: #fff;
+  color: var(--text-primary);
   cursor: pointer;
   width: 28px;
   height: 28px;
@@ -205,7 +201,7 @@ function addFolder() {
 }
 
 .remove-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--hover-bg);
 }
 
 .remove-btn svg {
@@ -219,20 +215,17 @@ function addFolder() {
 }
 
 .done-btn {
-  background-color: #333;
-  color: #fff;
-  border: none;
+  background-color: var(--hover-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
   padding: 8px 32px;
   font-size: 14px;
   cursor: pointer;
-  transition: background-color 0.1s;
+  transition: all 0.1s;
 }
 
 .done-btn:hover {
-  background-color: #555;
-}
-
-.done-btn:active {
-  background-color: #111;
+  background-color: var(--text-primary);
+  color: var(--bg-main);
 }
 </style>

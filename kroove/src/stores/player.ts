@@ -19,6 +19,7 @@ export const usePlayerStore = defineStore('player', () => {
   const scanActive = ref(false)
   const scanCount = ref(0)
   const searchQuery = ref('')
+  const themeMode = ref<'light' | 'dark' | 'system'>('dark')
 
   // 接收后端传来的当前曲目源信息
   const currentTrack = reactive({
@@ -242,6 +243,7 @@ export const usePlayerStore = defineStore('player', () => {
     scanActive,
     scanCount,
     searchQuery,
+    themeMode,
 
     initConnection,
     fetchBatchMetadata,

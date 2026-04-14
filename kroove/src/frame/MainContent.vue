@@ -53,7 +53,7 @@ const formatTime = (seconds: number) => {
             <GrooveVirtualList :item-height="52" :buffer="5">
               <template #default="{ item, id }">
                 <!-- 如果详情还没加载回来，显示一个高度占位，避免列表抽动 -->
-                <div v-if="!item" class="song-item-loading" style="height: 52px; opacity: 0.1; background: #fff; margin: 4px 0; border-radius: 4px;"></div>
+                <div v-if="!item" class="song-item-loading" style="height: 52px; opacity: 0.05; background: var(--text-primary); margin: 4px 0; border-radius: 4px;"></div>
                 
                 <SongListItem v-else
                   :key="id" 
@@ -95,20 +95,22 @@ const formatTime = (seconds: number) => {
 .main-content {
   flex: 1;
   position: relative;
-  background: black;
-  color: white;
+  background: var(--bg-main);
+  color: var(--text-primary);
   display: flex;
   flex-direction: column;
-  overflow-y: auto; /* 给整个外层开启滚动，使得滚动条靠在最右侧且贯穿上下 */
+  overflow-y: auto; 
   overflow-x: hidden;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 .content-header {
   position: sticky;
   top: 0;
-  background: #000; /* 改回纯黑，不透明 */
+  background: var(--bg-header); 
   z-index: 10;
   padding: 40px 40px 0 40px;
+  transition: background 0.3s ease;
 }
 
 .content-header h1 {
@@ -121,24 +123,23 @@ const formatTime = (seconds: number) => {
   display: flex;
   gap: 30px;
   margin-bottom: 20px;
-  /* 移除底边框，或让其透明，因为滚动过去时会更自然 */
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .tabs span {
   padding-bottom: 10px;
   cursor: pointer;
-  color: #aaa;
+  color: var(--text-secondary);
   font-size: 16px;
   transition: color 0.2s;
 }
 
 .tabs span:hover {
-  color: #ddd;
+  color: var(--text-primary);
 }
 
 .tabs span.active {
-  color: #fff;
+  color: var(--text-primary);
   border-bottom: 2px solid #0078d4;
 }
 
