@@ -14,6 +14,11 @@ export const usePlayerStore = defineStore('player', () => {
   const isFullScreen = ref(false) // 全屏页面是否展开
   const enableLyricsAnimation = ref(true) // 是否启用 Canvas 随机歌词
   const currentLineIndex = ref(-1)        // 当前播放的歌词行索引
+  
+  // 库扫描进度状态
+  const scanActive = ref(false)
+  const scanCount = ref(0)
+  const searchQuery = ref('')
 
   // 接收后端传来的当前曲目源信息
   const currentTrack = reactive({
@@ -96,6 +101,13 @@ export const usePlayerStore = defineStore('player', () => {
 
         // [New] 4.1 轻量级 ID 序列刷新
         if (data.type === 'queue_ids') {
+          // 【核心修复】如果当前正在搜索，且收到了全量库广播，则跳过本次本地更新以防止列表闪烁
+          if (data.isBroadcast && searchQuery.value) {
+            console.log("🔍 [SearchSync] 处于搜索中，忽略全量广播更新，静默重新同步过滤结果...");
+            search(searchQuery.value);
+            return; // 阻止本次全量覆盖
+          }
+
           queueIds.value = data.ids || [];
         }
 
@@ -121,6 +133,12 @@ export const usePlayerStore = defineStore('player', () => {
         if (data.type === 'lyric_line_change') {
           currentLineIndex.value = data.line;
         }
+
+        // 5. 处理库扫描进度
+        if (data.type === 'library_scan_status') {
+          scanActive.value = data.active;
+          scanCount.value = data.count;
+        }
       } catch (e) {
         console.warn('Socket message parse err:', e);
       }
@@ -145,6 +163,11 @@ export const usePlayerStore = defineStore('player', () => {
   const playPrev = () => sendCommand({ cmd: 'play_prev' });
   const playById = (id: number) => sendCommand({ cmd: 'play_by_id', id });
   const seek = (seconds: number) => sendCommand({ cmd: 'seek', seconds, relative: false });
+
+  const search = (query: string) => {
+    searchQuery.value = query;
+    sendCommand({ cmd: 'search_playlist', query });
+  }
 
   const syncMode = () => {
     let mode = 'sequential';
@@ -216,6 +239,9 @@ export const usePlayerStore = defineStore('player', () => {
     metadataMap,
     enableLyricsAnimation,
     currentLineIndex,
+    scanActive,
+    scanCount,
+    searchQuery,
 
     initConnection,
     fetchBatchMetadata,
@@ -225,6 +251,7 @@ export const usePlayerStore = defineStore('player', () => {
     playPrev,
     playById,
     seek,
+    search,
     toggleShuffle,
     toggleRepeat,
     setVolume,

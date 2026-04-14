@@ -4,6 +4,7 @@ import SongListItem from '../component/SongListItem.vue'
 import GrooveVirtualList from '../component/GrooveVirtualList.vue'
 import EmptyState from '../component/EmptyState.vue'
 import SettingsView from '../component/SettingsView.vue'
+import LibraryUpdateToast from '../component/LibraryUpdateToast.vue'
 import { usePlayerStore } from '../stores/player'
 
 defineProps<{
@@ -29,6 +30,7 @@ const formatTime = (seconds: number) => {
 
 <template>
   <main class="main-content">
+    <LibraryUpdateToast />
 
     <template v-if="activeSidebar === 'home' || !activeSidebar">
       <header class="content-header">
@@ -92,6 +94,7 @@ const formatTime = (seconds: number) => {
 <style scoped>
 .main-content {
   flex: 1;
+  position: relative;
   background: black;
   color: white;
   display: flex;

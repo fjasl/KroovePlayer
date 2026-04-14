@@ -12,13 +12,12 @@ const emit = defineEmits(['toggle-sidebar']);
 
 const playerStore = usePlayerStore();
 const isFocused = ref(false);
-const searchQuery = ref('');
 let debounceTimer: any = null;
 
 const handleSearch = () => {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
-    playerStore.sendCommand({ cmd: 'search_playlist', query: searchQuery.value });
+    playerStore.search(playerStore.searchQuery);
   }, 300);
 };
 </script>
@@ -31,7 +30,7 @@ const handleSearch = () => {
       @click="!isExpanded && emit('toggle-sidebar')"
     >
       <input 
-        v-model="searchQuery"
+        v-model="playerStore.searchQuery"
         type="text" 
         placeholder="搜索" 
         class="search-input"
