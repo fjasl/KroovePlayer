@@ -4,6 +4,9 @@ import GrooveSwitch from './GrooveSwitch.vue'
 import GrooveRadio from './GrooveRadio.vue'
 import GrooveLink from './GrooveLink.vue'
 import LocationDialog from './LocationDialog.vue'
+import { usePlayerStore } from '../stores/player'
+
+const playerStore = usePlayerStore()
 
 const autoRetrieve = ref(true)
 const artistLockScreen = ref(false)
@@ -51,8 +54,8 @@ function openLocationDialog() {
           </div>
           
           <div class="option-block">
-            <p class="description">将"正在播放"中的艺术家曲目设置为我的壁纸</p>
-            <GrooveSwitch v-model="artistWallpaper" />
+            <p class="description">全屏模式下渲染具有动态艺术感的随机歌词</p>
+            <GrooveSwitch v-model="playerStore.enableLyricsAnimation" />
           </div>
         </section>
 

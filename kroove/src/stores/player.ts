@@ -12,6 +12,8 @@ export const usePlayerStore = defineStore('player', () => {
   const duration = ref(0)
 
   const isFullScreen = ref(false) // 全屏页面是否展开
+  const enableLyricsAnimation = ref(true) // 是否启用 Canvas 随机歌词
+  const currentLineIndex = ref(-1)        // 当前播放的歌词行索引
 
   // 接收后端传来的当前曲目源信息
   const currentTrack = reactive({
@@ -114,6 +116,11 @@ export const usePlayerStore = defineStore('player', () => {
             isRepeat.value = (data.playbackMode === 'repeat');
           }
         }
+
+        // 4. 处理实时歌词行变动
+        if (data.type === 'lyric_line_change') {
+          currentLineIndex.value = data.line;
+        }
       } catch (e) {
         console.warn('Socket message parse err:', e);
       }
@@ -207,6 +214,8 @@ export const usePlayerStore = defineStore('player', () => {
     fullPlaylist,
     queueIds,
     metadataMap,
+    enableLyricsAnimation,
+    currentLineIndex,
 
     initConnection,
     fetchBatchMetadata,
