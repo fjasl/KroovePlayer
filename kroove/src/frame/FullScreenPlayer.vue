@@ -160,6 +160,12 @@ class LyricNode {
   isExiting: boolean = false;
   fontSize: number;
   
+  // 追踪光标系统
+  trackX: number = 0;
+  trackY: number = 0;
+  trackW: number = 0;
+  trackOpacity: number = 0;
+
   entranceStyle: EntranceStyle;
   exitStyle: ExitStyle;
   elapsed: number = 0;
@@ -217,6 +223,13 @@ class LyricNode {
       sprite.isActivated = true;
       this.words = [sprite];
     }
+
+    // 初始化光标位置到第一个词，避免突发跳变
+    if (this.words.length > 0) {
+       this.trackX = this.words[0].originX;
+       this.trackY = this.words[0].originY;
+       this.trackW = 20;
+    }
   }
 
   update(dt: number) {
@@ -225,14 +238,31 @@ class LyricNode {
     // 基础透明度渐入
     this.opacity += (1 - this.opacity) * 0.1;
 
-    // 驱动所有子级散点
+    // 4. 追踪光标逻辑
+    let currentActiveWord: WordSprite | null = null;
     this.words.forEach(w => {
-      // 如果还没到该词的出场时间，检查是否应激活
+      // 检查是否激活
       if (!w.isActivated && this.elapsed >= w.start) {
         w.isActivated = true;
       }
       w.update(dt, this.isExiting, this.exitStyle);
+
+      // 寻找当前播发的活动词（光标跟随目标）
+      if (!this.isExiting && this.elapsed >= w.start && this.elapsed <= (w.start + (w.duration || 1000))) {
+         currentActiveWord = w;
+      }
     });
+
+    if (currentActiveWord) {
+      this.trackOpacity += (1 - this.trackOpacity) * 0.1;
+      // 这里的 10 和 20 是为了给光标留一点内边距（Padding）
+      const targetW = 20; // 这里的宽度计算需要结合绘制时的 ctx，稍后在 draw 中也会用到
+      // 我们在 draw 中再精确计算宽度，这里先处理坐标的平移
+      this.trackX += (currentActiveWord.currentX - this.trackX) * 0.15 * dt;
+      this.trackY += (currentActiveWord.currentY - this.trackY) * 0.15 * dt;
+    } else {
+      this.trackOpacity *= 0.9;
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D) {
@@ -247,7 +277,34 @@ class LyricNode {
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
 
-    // 委派给每个词自己的绘制逻辑
+    // A. 绘制追踪光标 (在文字下方)
+    if (this.trackOpacity > 0.01) {
+      let activeW = 0;
+      // 找到当前词计算宽度
+      const activeWord = this.words.find(w => this.elapsed >= w.start && this.elapsed <= (w.start + (w.duration || 1000)));
+      if (activeWord) {
+         activeW = ctx.measureText(activeWord.text).width + 16;
+         // 平滑宽度变化
+         this.trackW += (activeW - this.trackW) * 0.2;
+      }
+
+      ctx.save();
+      ctx.translate(this.trackX, this.trackY);
+      ctx.globalAlpha = this.opacity * this.trackOpacity * 0.35;
+      ctx.fillStyle = '#fff';
+      
+      // 添加类似终端光标的微弱光晕
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+      
+      const height = this.fontSize * 1.1;
+      ctx.beginPath();
+      ctx.roundRect(-this.trackW / 2, -height / 1.5, this.trackW, height, 4);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // B. 委派给每个词自己的绘制逻辑
     this.words.forEach(w => w.draw(ctx, this.opacity));
     
     ctx.restore();
