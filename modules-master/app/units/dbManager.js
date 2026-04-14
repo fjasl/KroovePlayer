@@ -34,6 +34,9 @@ module.exports = {
   // 【核心能力】极速由 ID 获取物理路径
   getTrackById: (id) => db.prepare("SELECT * FROM tracks WHERE id = ?").get(id),
   // dbManager.js
+  removeTrackByPath: (filePath) => 
+    db.prepare("DELETE FROM tracks WHERE path = ?").run(filePath),
+
   updateTrackManual: (id, data) => {
     const fields = [];
     const values = [];

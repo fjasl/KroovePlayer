@@ -90,6 +90,18 @@ class CoreManager {
     if (this.libraryFolders.length > 0) {
       // 2. 正常运行：执行一次增量扫描
       await libraryManager.scanAll();
+
+      // [New] 绑定扫描状态回调：向前端推送正在添加歌曲的通知
+      libraryManager.onScanStatus = (active, count) => {
+        this.broadcast({
+          type: "library_scan_status",
+          active: active,
+          count: count
+        });
+      };
+
+      // 3. 启动实时监听：当文件变动时自动执行 syncCurrentState
+      libraryManager.initWatcher(() => this.syncCurrentState());
     } else {
       console.log("ℹ️ 当前曲库为空，请通过 API 添加音乐目录。");
     }
@@ -121,9 +133,14 @@ class CoreManager {
     // 同步内存列表
     this.libraryFolders = configManager.get("libraryFolders") || [];
     console.log(`➕ 目录载入成功: ${absolutePath}`);
+    
+    // 刷新监控
+    libraryManager.initWatcher(() => this.syncCurrentState());
+    
     playlist.loadAll(); // 库有变更，重载内存队列
     this.broadcast({ type: "library_folders", folders: this.libraryFolders });
     this.broadcast({ type: "full_playlist", list: playlist.getFullList() });
+    this.broadcast({ type: "queue_ids", ids: playlist.getQueueIds(), isBroadcast: true });
   }
 
   async removeLibraryFolder(targetPath) {
@@ -131,7 +148,12 @@ class CoreManager {
     configManager.removeLibraryFolder(absolutePath);
     this.libraryFolders = configManager.get("libraryFolders") || [];
     console.log(`➖ 目录移除成功: ${absolutePath}`);
+    
+    // 刷新监控
+    libraryManager.initWatcher(() => this.syncCurrentState());
+    
     this.broadcast({ type: "library_folders", folders: this.libraryFolders });
+    this.broadcast({ type: "queue_ids", ids: playlist.getQueueIds(), isBroadcast: true });
   }
 
   playById(id) {
@@ -217,6 +239,9 @@ class CoreManager {
    * 向指定客户端或全局同步当前全量状态
    */
   syncCurrentState() {
+    // 【核心修复】由于 Watcher 只更新了 DB，必须手动让列表管理器重新从数据库载入最新全量轨道
+    playlist.loadAll();
+
     // 优先从显式维护的 currentPlaying 同步，这比从索引取更安全
     if (this.currentPlaying) {
       this.broadcastUiUpdate(this.currentPlaying.id, this.currentPlaying, this.lastLayout);
@@ -245,7 +270,8 @@ class CoreManager {
     // [New] 下发轻量级 ID 序列，供前端虚拟列表索引
     this.broadcast({
       type: "queue_ids",
-      ids: playlist.getQueueIds()
+      ids: playlist.getQueueIds(),
+      isBroadcast: true
     });
   }
   // coreManager.js

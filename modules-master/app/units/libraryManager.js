@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const mm = require('music-metadata');
+const chokidar = require('chokidar');
 const dbManager = require('./dbManager');
 const configManager = require('./configManager'); // 引入新的 JSON 配置管理器
 
@@ -9,6 +10,14 @@ const CACHE_DIR = path.resolve(__dirname, '../cache/covers');
 if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
 
 class LibraryManager {
+    constructor() {
+        this.watcher = null;
+        this.notifyTimer = null;
+        this.scanCount = 0; // 当前“突发”扫描的文件总数
+        this.isScanning = false;
+        this.onScanStatus = null; // 用于通知上层的回调
+    }
+
     /**
      * 核心扫描入口：遍历所有库文件夹并增量更新
      */
@@ -109,6 +118,77 @@ class LibraryManager {
         } catch (e) {
             console.error(`❌ 解析 ${filePath} 出错:`, e.message);
         }
+    }
+
+    /**
+     * 实时库监视器初始化
+     * @param {Function} onLibraryChanged - 库发生变动后的回调 (带防抖)
+     */
+    initWatcher(onLibraryChanged) {
+        const folders = configManager.get('libraryFolders') || [];
+        if (folders.length === 0) return;
+
+        if (this.watcher) this.watcher.close();
+
+        console.log(`👁️  库监视器已开启: 正在观察 ${folders.length} 个目录...`);
+        
+        this.watcher = chokidar.watch(folders, {
+            ignored: /(^|[\/\\])\../, // 忽略隐藏文件
+            persistent: true,
+            ignoreInitial: true, // 初始扫描由 scanAll 完成，watcher 只看增量
+            awaitWriteFinish: {
+                stabilityThreshold: 1000,
+                pollInterval: 100
+            }
+        });
+
+        const triggerChange = () => {
+            if (this.onScanStatus) this.onScanStatus(true, this.scanCount);
+
+            if (this.notifyTimer) clearTimeout(this.notifyTimer);
+            this.notifyTimer = setTimeout(() => {
+                console.log("🔄 [Watcher] 检测到库显著变动，正在通知系统同步...");
+                this.isScanning = false;
+                if (this.onScanStatus) this.onScanStatus(false, this.scanCount);
+                if (onLibraryChanged) onLibraryChanged();
+                this.scanCount = 0; // 结算后清零
+            }, 3000); // 扫描稳定 3 秒后关闭通知
+        };
+
+        this.watcher
+            .on('add', async filePath => {
+                if (this.isAudioFile(filePath)) {
+                    this.isScanning = true;
+                    this.scanCount++;
+                    console.log(`➕ [Watcher] 发现新曲目: ${path.basename(filePath)}`);
+                    await this.processTrack(filePath);
+                    triggerChange();
+                }
+            })
+            .on('change', async filePath => {
+                if (this.isAudioFile(filePath) || filePath.endsWith('.lrc')) {
+                    console.log(`📝 [Watcher] 更新资源: ${path.basename(filePath)}`);
+                    // 如果是歌词变动，需要处理其对应的音频文件
+                    const targetPath = filePath.endsWith('.lrc') 
+                        ? filePath.replace('.lrc', '.mp3') // 简化逻辑，实际可能需要更复杂的映射
+                        : filePath;
+                    
+                    if (fs.existsSync(targetPath)) await this.processTrack(targetPath);
+                    triggerChange();
+                }
+            })
+            .on('unlink', filePath => {
+                if (this.isAudioFile(filePath)) {
+                    console.log(`➖ [Watcher] 物理删除: ${path.basename(filePath)}`);
+                    dbManager.removeTrackByPath(filePath);
+                    triggerChange();
+                }
+            });
+    }
+
+    isAudioFile(filePath) {
+        const ext = path.extname(filePath).toLowerCase();
+        return ['.mp3', '.flac', '.wav', '.ogg', '.m4a'].includes(ext);
     }
 
     /**
