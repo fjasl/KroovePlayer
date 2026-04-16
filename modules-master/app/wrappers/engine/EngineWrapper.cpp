@@ -19,6 +19,7 @@ Napi::Object EngineWrapper::Init(Napi::Env env, Napi::Object exports) {
                          &EngineWrapper::SetOnStatusUpdate),
           InstanceMethod("setOnStateChange", &EngineWrapper::SetOnStateChange),
           InstanceMethod("setOnLineChange", &EngineWrapper::SetOnLineChange),
+          InstanceMethod("setVisualizerFrequency", &EngineWrapper::SetVisualizerFrequency),
       });
 
   Napi::FunctionReference *constructor = new Napi::FunctionReference();
@@ -131,6 +132,14 @@ Napi::Value EngineWrapper::SetMute(const Napi::CallbackInfo &info) {
   if (info.Length() > 0) {
     bool mute = info[0].As<Napi::Boolean>();
     _engine->engine_setMute(mute);
+  }
+  return info.Env().Undefined();
+}
+
+Napi::Value EngineWrapper::SetVisualizerFrequency(const Napi::CallbackInfo &info) {
+  if (info.Length() > 0) {
+    int hz = info[0].As<Napi::Number>().Int32Value();
+    _engine->setVisualizerFrequency(hz);
   }
   return info.Env().Undefined();
 }

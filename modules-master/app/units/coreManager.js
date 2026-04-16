@@ -23,8 +23,25 @@ class CoreManager {
   constructor() {
     this.wss = null; // 初始不绑定网络
     this.engine = new Engine();
-    this.view = new DataView(this.engine.getSharedStatusBuffer().buffer);
-    
+    // 2. 获取共享内存 Buffer 并建立视图
+    this.sharedBuffer = this.engine.getSharedStatusBuffer();
+    this.view = new DataView(
+      this.sharedBuffer.buffer,
+      this.sharedBuffer.byteOffset,
+      this.sharedBuffer.byteLength
+    );
+
+    // [New] 建立频谱数据的直接映射视图 (Offset: 72, Count: 256)
+    this.spectrumView = new Float32Array(
+      this.sharedBuffer.buffer,
+      this.sharedBuffer.byteOffset + 72,
+      256
+    );
+
+    this.vizTimer = null;
+    this.vizTimer = null;
+    this.vizFrequency = 60;
+
     // ==========================================
     // --- 核心播放状态模型 (Playback Session) ---
     // ==========================================
@@ -71,6 +88,30 @@ class CoreManager {
     global._engineRef = this.engine;
 
     this.initSync();
+  }
+
+  // [New] 独立的频谱广播任务
+  startVisualizerBroadcast(hz = 60) {
+    if (this.vizTimer) clearInterval(this.vizTimer);
+    this.vizFrequency = hz;
+    this.engine.setVisualizerFrequency(hz);
+
+    this.vizTimer = setInterval(() => {
+      // 只有在有连接且播放时才广播，减少无效开销
+      if (this.wss && this.wss.clients.size > 0 && this.playback.state === PlayState.PLAYING) {
+        this.broadcast({
+          type: "visualizer_update",
+          spectrum: Array.from(this.spectrumView)
+        });
+      }
+    }, 1000 / hz);
+  }
+
+  stopVisualizerBroadcast() {
+    if (this.vizTimer) {
+      clearInterval(this.vizTimer);
+      this.vizTimer = null;
+    }
   }
 
   /**
@@ -443,6 +484,13 @@ class CoreManager {
         break;
       case "set_mute":
         this.engine.setMute(cmd.mute);
+        break;
+      case "toggle_visualizer":
+        if (cmd.active) {
+          this.startVisualizerBroadcast(cmd.hz || 60);
+        } else {
+          this.stopVisualizerBroadcast();
+        }
         break;
       case "add_folder":
         this.addLibraryFolder(cmd.path);

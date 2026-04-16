@@ -9,13 +9,15 @@
 namespace engine {
 
 Engine::Engine() {
-  // 1. 地址缝合：让 m_status 里的指针永远指向内部私有实例的成员地盘
-  // 这种做法实现了“单一数据源”，避免了数据在不同结构体间的冗余拷贝
-  m_status.engine_player_properties = &player_core_.m_properties;
+  // 0. 内存清零，防止读到随机垃圾数据
+  memset(&shared_state_, 0, sizeof(SharedEngineState));
+
+  // 1. 地址缝合
+  m_status.engine_player_properties = &m_player.m_properties;
   m_status.engine_lyric_document = &lrc_core_.doc;
 
-  // 2. 注册核心监听：当底层播放器属性变化时，第一时间触发 Engine 的统筹计算
-  player_core_.setOnPropertiesChangedCallback(
+  // 2. 注册核心监听
+  m_player.setOnPropertiesChangedCallback(
       [this](const player::PlayerProperties &props) {
         handle_internal_update(props);
       });
@@ -25,7 +27,7 @@ Engine::~Engine() {}
 
 bool Engine::engine_load(const std::string &songUrl,
                          const std::string &lrcUrl) {
-  // 1. 自动从文件路径读取歌词内容 (Windows 下需处理宽字符路径)
+  // 1. 自动从文件路径读取歌词内容
   std::string lrcContent = "";
   if (!lrcUrl.empty()) {
 #ifdef _WIN32
@@ -43,20 +45,15 @@ bool Engine::engine_load(const std::string &songUrl,
     }
   }
 
-  // 如果没有歌词，或者文件读取为空，提供默认提示
   if (lrcContent.empty()) {
     lrcContent = "[00:00.00] 纯音乐，请欣赏";
   }
 
-  // 2. 耗时的解析过程在锁外独立完成（极致缩减锁范围）
   lyricer::LrcParser temp_parser;
   temp_parser.parse(lrcContent);
 
   {
-    // 3. 仅在瞬间覆盖内部状态时占用锁
     std::lock_guard<std::mutex> lock(status_mutex_);
-
-    // 指针交换，O(1) 的极致响应
     lrc_core_.doc = std::move(temp_parser.doc);
 
     // 重置同步状态
@@ -66,10 +63,8 @@ bool Engine::engine_load(const std::string &songUrl,
     m_status.word_progress = 0.0;
   }
 
-  // 3. 启动音频加载 (锁外执行)
-  // 因为 load 会触发 updateState -> notifyPropertiesChanged ->
-  // handle_internal_update 如果在锁内调用，会陷入自死锁。
-  player_core_.load(songUrl);
+  // 3. 启动音频加载
+  m_player.load(songUrl);
 
   return true;
 }
@@ -85,6 +80,9 @@ void Engine::handle_internal_update(const player::PlayerProperties &props) {
     queryResult = lyricer::LyricQuery::query(lrc_core_.doc, props.timePos);
 
     // 1. 同步到共享内存结构体 (高频，静默)
+    // [New] 确保渲染器已启动并绑定共享内存中的频谱槽位
+    m_visualizer.start(shared_state_.spectrum, 256);
+
     shared_state_.playback_state = static_cast<int>(props.state);
     shared_state_.time_pos = props.timePos;
     shared_state_.duration = props.duration;
@@ -143,14 +141,37 @@ void Engine::set_on_line_change(std::function<void(int)> cb) {
   on_line_change_ = cb;
 }
 
-// --- 控制指令透传：外界只接触 Engine 壳，不需要知道 player_core_ 的存在 ---
-void Engine::engine_play() { player_core_.play(); }
-void Engine::engine_pause() { player_core_.pause(); }
-void Engine::engine_stop() { player_core_.stop(); }
-void Engine::engine_seek(double seconds, bool relative) {
-  player_core_.seek(seconds, relative);
+void Engine::setVisualizerFrequency(int hz) {
+  m_visualizer.setFrequency(hz);
 }
-void Engine::engine_setVolume(double volume) { player_core_.setVolume(volume); }
-void Engine::engine_setMute(bool mute) { player_core_.setMute(mute); }
+
+void Engine::syncStatus(SharedEngineState *sharedState) {
+  if (!sharedState) return;
+
+  // [New] 启动频谱分析器：绑定并高频刷新共享内存
+  m_visualizer.start(sharedState->spectrum, 256);
+
+  // 1. 同步播放状态
+  auto props = m_player.getProperties();
+  sharedState->playback_state = static_cast<int>(props.state);
+  sharedState->time_pos = props.timePos;
+  sharedState->duration = props.duration;
+  sharedState->volume = props.volume;
+  sharedState->is_paused = props.isPaused ? 1 : 0;
+  sharedState->is_muted = props.isMuted ? 1 : 0;
+
+  // 2. 同步歌词状态
+  sharedState->line_index = m_status.line_index;
+  sharedState->line_progress = m_status.line_progress;
+  sharedState->word_index = m_status.word_index;
+  sharedState->word_progress = m_status.word_progress;
+}
+
+void Engine::engine_play() { m_player.play(); }
+void Engine::engine_pause() { m_player.pause(); }
+void Engine::engine_stop() { m_player.stop(); }
+void Engine::engine_seek(double seconds, bool relative) { m_player.seek(seconds, relative); }
+void Engine::engine_setVolume(double volume) { m_player.setVolume(volume); }
+void Engine::engine_setMute(bool mute) { m_player.setMute(mute); }
 
 } // namespace engine

@@ -46,6 +46,9 @@ struct SharedEngineState {
   int word_index;        // Offset: 56
   int padding2;          // 再次补齐
   double word_progress;  // Offset: 64
+
+  // [New] 频谱数据区 (256 Bins)
+  float spectrum[256];   // Offset: 72
 };
 #pragma pack(pop)
 

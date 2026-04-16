@@ -34,6 +34,7 @@ add_library(${PROJECT_NAME} SHARED
     wrappers/engine/lyricer/LrcParser.cpp
     wrappers/engine/lyricer/LyricQuery.cpp
     wrappers/engine/engine.cpp
+    wrappers/engine/visualizer/Visualizer.cpp
     wrappers/engine/EngineWrapper.cpp
     addon.cpp
 )

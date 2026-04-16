@@ -4,6 +4,7 @@
 #include "lyricer/LrcParser.h"
 #include "lyricer/LyricQuery.h"
 #include "player/PlayerCore.h"
+#include "visualizer/Visualizer.h"
 #include <functional>
 #include <mutex>
 
@@ -23,6 +24,12 @@ public:
   void engine_setVolume(double volume);
   void engine_setMute(bool mute);
 
+  // [New] 频谱设置
+  void setVisualizerFrequency(int hz);
+
+  // 状态同步 (内部使用)
+  void syncStatus(SharedEngineState *sharedState);
+
   // 通知外界：状态变了
   void set_on_status_update(std::function<void(const EngineStatus &)> cb);
   void set_on_state_change(std::function<void(player::PlayerState)> cb);
@@ -30,8 +37,9 @@ public:
 
 private:
   // 底层模块实例：保持私有，被 Engine 保护起来
-  player::PlayerCore player_core_;
+  player::PlayerCore m_player;
   lyricer::LrcParser lrc_core_;
+  visualizer::Visualizer m_visualizer;
 
   // 核心：虽然这些是私有的，但 EngineStatus 里的指针可以指向它们
   EngineStatus m_status;

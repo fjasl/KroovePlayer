@@ -20,6 +20,7 @@ private:
   Napi::Value Seek(const Napi::CallbackInfo &info);
   Napi::Value SetVolume(const Napi::CallbackInfo &info);
   Napi::Value SetMute(const Napi::CallbackInfo &info);
+  Napi::Value SetVisualizerFrequency(const Napi::CallbackInfo &info);
 
   // 【核心】：获取共享内存 Buffer
   Napi::Value GetSharedStatusBuffer(const Napi::CallbackInfo &info);
