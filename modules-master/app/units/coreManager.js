@@ -470,6 +470,8 @@ class CoreManager {
       case "set_ui_state":
         if (cmd.uiState) {
           configManager.set('uiState', cmd.uiState);
+          // [Multi-Window Sync] 立即向所有连接的 UI 窗口转发状态，实现多端同步
+          this.broadcast({ type: "ui_state", uiState: cmd.uiState });
         }
         break;
     }

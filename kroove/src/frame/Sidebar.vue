@@ -3,6 +3,7 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import SidebarItem from '../component/SidebarItem.vue';
 import SidebarSearch from '../component/SidebarSearch.vue';
+import { usePlayerStore } from '../stores/player';
 
 // 图标组件
 import IconNote from '../assets/icons/IconNote.vue';
@@ -11,7 +12,7 @@ import IconPlaying from '../assets/icons/IconPlaying.vue';
 import IconSettings from '../assets/icons/IconSettings.vue';
 import IconMenu from '../assets/icons/IconMenu.vue';
 
-const isExpanded = ref(false);
+const playerStore = usePlayerStore();
 const sidebarRef = ref<HTMLElement | null>(null);
 
 const props = defineProps<{ activeId?: string }>();
@@ -23,12 +24,12 @@ const menuItems = [
   { id: 'playing', icon: IconPlaying, label: '正在播放' },
 ];
 
-const toggle = () => (isExpanded.value = !isExpanded.value);
+const toggle = () => (playerStore.isSidebarExpanded = !playerStore.isSidebarExpanded);
 const select = (id: string) => emit('update:activeId', id);
 
 const handleClickOutside = (event: MouseEvent) => {
-  if (isExpanded.value && sidebarRef.value && !sidebarRef.value.contains(event.target as Node)) {
-    isExpanded.value = false;
+  if (playerStore.isSidebarExpanded && sidebarRef.value && !sidebarRef.value.contains(event.target as Node)) {
+    playerStore.isSidebarExpanded = false;
   }
 };
 
@@ -42,7 +43,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <aside ref="sidebarRef" class="sidebar" :class="{ 'is-expanded': isExpanded }">
+  <aside ref="sidebarRef" class="sidebar" :class="{ 'is-expanded': playerStore.isSidebarExpanded }">
     <!-- 汉堡按钮：自成首部占位 -->
     <div class="hamburger-container" @click="toggle">
       <div class="icon-box">
@@ -52,7 +53,7 @@ onUnmounted(() => {
 
     <!-- 搜索栏组件：通过内部视觉边距处理形态 -->
     <SidebarSearch 
-      :is-expanded="isExpanded" 
+      :is-expanded="playerStore.isSidebarExpanded" 
       @toggle-sidebar="toggle"
     />
 

@@ -55,6 +55,10 @@ export const usePlayerStore = defineStore('player', () => {
   // 全局 socket 管理
   let ws: WebSocket | null = null;
   let isDraggingProgress = false;
+  let isInternalUpdate = false; // [New] 同步锁：防止接收后端同步信号后产生无限反馈环
+
+  // [New] UI 状态：侧边栏展开
+  const isSidebarExpanded = ref(false);
 
   const initConnection = () => {
     if (ws) return;
@@ -141,13 +145,28 @@ export const usePlayerStore = defineStore('player', () => {
           }
         }
 
-        // [New] 6. UI 状态同步恢复
+        // [New] 6. UI 状态同步恢复 (协同模式)
         if (data.type === 'ui_state') {
           if (data.uiState) {
+            isInternalUpdate = true; // 开启同步锁
+            
             if (data.uiState.activeSidebarId) activeSidebarId.value = data.uiState.activeSidebarId
             if (data.uiState.activeTab) activeTab.value = data.uiState.activeTab
             if (data.uiState.isFullScreen !== undefined) isFullScreen.value = data.uiState.isFullScreen
             if (data.uiState.themeMode) themeMode.value = data.uiState.themeMode
+            
+            // [协同增强] 同步侧边栏展开状态
+            if (data.uiState.isSidebarExpanded !== undefined) {
+              isSidebarExpanded.value = data.uiState.isSidebarExpanded;
+            }
+
+            // [协同增强] 同步搜索关键词并触发过滤
+            if (data.uiState.searchQuery !== undefined && data.uiState.searchQuery !== searchQuery.value) {
+              searchQuery.value = data.uiState.searchQuery;
+              search(searchQuery.value); // 在此窗口同步执行过滤
+            }
+
+            setTimeout(() => isInternalUpdate = false, 50); // 略微延时释放锁
           }
         }
 
@@ -226,13 +245,16 @@ export const usePlayerStore = defineStore('player', () => {
         activeSidebarId: activeSidebarId.value,
         activeTab: activeTab.value,
         isFullScreen: isFullScreen.value,
-        themeMode: themeMode.value
+        themeMode: themeMode.value,
+        isSidebarExpanded: isSidebarExpanded.value,
+        searchQuery: searchQuery.value
       }
     });
   }
 
   // 监听关键 UI 状态变动并自动报备
-  watch([activeSidebarId, activeTab, isFullScreen, themeMode], () => {
+  watch([activeSidebarId, activeTab, isFullScreen, themeMode, isSidebarExpanded, searchQuery], () => {
+    if (isInternalUpdate) return; // 如果是来自后端的同步信号，不反馈发送，防止死循环
     syncUiState();
   }, { deep: true });
 
@@ -309,6 +331,7 @@ export const usePlayerStore = defineStore('player', () => {
     toggleFullScreen,
     activeSidebarId,
     activeTab,
+    isSidebarExpanded,
     syncUiState
   }
 })
