@@ -44,14 +44,14 @@ void PlayerCore::initializeMpv() {
   // 强制不加载用户配置，避免被 mpv.conf 覆盖
   mpv_set_option_string(m_mpv, "no-config", "yes");
   mpv_set_option_string(m_mpv, "keep-open", "no"); // 关键！强制不保持打开
-  mpv_set_option_string(m_mpv, "keep-open-pause",
-                        "no"); // 即使 keep-open，也别自动 pause
+  mpv_set_option_string(m_mpv, "keep-open-pause", "no"); // 即使 keep-open，也别自动 pause
 
   // mpv_set_option_string(m_mpv, "idle", "no");
   //  mpv_set_option_string(m_mpv, "keep-open", "no");
   //   设置一些初始选项（如果需要纯音频，可以禁用视频输出等）
-  mpv_set_option_string(m_mpv, "vid", "no");
 
+  mpv_set_option_string(m_mpv, "vid", "no");
+  mpv_set_option_string(m_mpv, "pause", "yes");
   // 核心：处理跨平台的音频输出绑定
 #ifdef _WIN32
   // Windows 下默认，暂不处理特殊 loopback 管道
@@ -135,8 +135,11 @@ void PlayerCore::handleMpvEvent(mpv_event *event) {
   case MPV_EVENT_FILE_LOADED:
     // 文件初始元数据拉取完毕，通常接下来会自动切到开始播放（或者暂停）
 
-    updateState(
-        PlayerState::Playing); // 如果 mpv 配置了 auto-play 的话会切入 playing
+   if (m_properties.isPaused) {
+      updateState(PlayerState::Paused);
+    } else {
+      updateState(PlayerState::Playing);
+    }
     break;
 
   case MPV_EVENT_PLAYBACK_RESTART:
@@ -185,26 +188,31 @@ void PlayerCore::handlePropertyChange(mpv_event_property *prop) {
 
   if (name == "time-pos" && prop->format == MPV_FORMAT_DOUBLE) {
     m_properties.timePos = *static_cast<double *>(prop->data);
-  } else if (name == "duration" && prop->format == MPV_FORMAT_DOUBLE) {
+  } 
+  else if (name == "duration" && prop->format == MPV_FORMAT_DOUBLE) {
     m_properties.duration = *static_cast<double *>(prop->data);
-  } else if (name == "volume" && prop->format == MPV_FORMAT_DOUBLE) {
+  } 
+  else if (name == "volume" && prop->format == MPV_FORMAT_DOUBLE) {
     m_properties.volume = *static_cast<double *>(prop->data);
-  } else if (name == "pause" && prop->format == MPV_FORMAT_FLAG) {
+  } 
+  else if (name == "pause" && prop->format == MPV_FORMAT_FLAG) {
     m_properties.isPaused = *static_cast<int *>(prop->data);
     if (m_properties.isPaused && m_properties.state == PlayerState::Playing) {
       updateState(PlayerState::Paused);
-    } else if (!m_properties.isPaused &&
-               m_properties.state == PlayerState::Paused) {
+    } 
+    else if (!m_properties.isPaused && m_properties.state == PlayerState::Paused) {
       updateState(PlayerState::Playing);
     }
-  } else if (name == "mute" && prop->format == MPV_FORMAT_FLAG) {
+  } 
+  else if (name == "mute" && prop->format == MPV_FORMAT_FLAG) {
     m_properties.isMuted = *static_cast<int *>(prop->data);
-  } else if (name == "core-idle" && prop->format == MPV_FORMAT_FLAG) {
+  } 
+  else if (name == "core-idle" && prop->format == MPV_FORMAT_FLAG) {
     m_properties.isCoreIdle = *static_cast<int *>(prop->data);
     if (m_properties.isCoreIdle && m_properties.state == PlayerState::Playing) {
       updateState(PlayerState::Buffering);
-    } else if (!m_properties.isCoreIdle &&
-               m_properties.state == PlayerState::Buffering) {
+    }
+    else if (!m_properties.isCoreIdle && m_properties.state == PlayerState::Buffering) {
       updateState(PlayerState::Playing);
     }
   }
@@ -248,6 +256,7 @@ void PlayerCore::load(const std::string &url) {
     m_properties.currentMedia = url;
   }
   updateState(PlayerState::Loading);
+  //const char *cmd[] = {"loadfile", url.c_str(), "replace", "pause=yes", NULL};
   const char *cmd[] = {"loadfile", url.c_str(), NULL};
   mpv_command(m_mpv, cmd);
 }

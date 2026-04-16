@@ -6,16 +6,66 @@ const libraryManager = require("./libraryManager");
 const playlist = require("./playlistManager");
 const configManager = require("./configManager"); // 引入 JSON 配置
 
+// ==========================================
+// --- 核心播放状态枚举 (与 C++ 保持一致) ---
+// ==========================================
+const PlayState = {
+  IDLE: 0,
+  LOADING: 1,
+  BUFFERING: 2,
+  PLAYING: 3,
+  PAUSED: 4,
+  STOPPED: 5,
+  ERROR: 6
+};
+
 class CoreManager {
   constructor() {
     this.wss = null; // 初始不绑定网络
     this.engine = new Engine();
     this.view = new DataView(this.engine.getSharedStatusBuffer().buffer);
-    this.lastState = -1;
-    this.lastLayout = null; // 缓存最新歌词，供后来连入的客户端同步
+    
+    // ==========================================
+    // --- 核心播放状态模型 (Playback Session) ---
+    // ==========================================
+    // 采用 Getter 模式直接透传共享内存数据，确保“零拷贝”高性能
+    const self = this;
+    this.playback = {
+      // 1. 静态数据区 (仅在切歌时更新)
+      item: null,      // 歌曲元数据
+      lyrics: null,    // 歌词全文布局
+
+      // 2. 动态状态区 (通过 Getter 实时访问共享内存)
+      get state() { return self.view.getInt32(0, true); },
+      get timePos() { return self.view.getFloat64(8, true); },
+      get duration() { return self.view.getFloat64(16, true); },
+      get volume() { return self.view.getFloat64(24, true); },
+      get isPaused() { return !!self.view.getInt32(32, true); },
+      get isMuted() { return !!self.view.getInt32(36, true); },
+      get lineIndex() { return self.view.getInt32(40, true); },
+      get lineProgress() { return self.view.getFloat64(48, true); },
+      get wordIndex() { return self.view.getInt32(56, true); },
+      get wordProgress() { return self.view.getFloat64(64, true); },
+
+      // 辅助方法：导出当前状态快照（用于 JSON 广播）
+      getSnapshot() {
+        return {
+          state: this.state,
+          timePos: this.timePos,
+          duration: this.duration,
+          lineIndex: this.lineIndex,
+          lineProgress: this.lineProgress,
+          wordIndex: this.wordIndex,
+          wordProgress: this.wordProgress,
+          isPaused: this.isPaused,
+          isMuted: this.isMuted
+        };
+      }
+    };
+
     this.libraryFolders = []; // 实时维护监控目录列表
     this.playlist = playlist;
-    this.currentPlaying = null; // [New] 显式维护当前正在播的元数据，不依赖游标。
+    this.lastState = -1; // 用于检测低频状态切换
 
     // 锁定引用防止被 GC
     global._engineRef = this.engine;
@@ -30,53 +80,78 @@ class CoreManager {
     this.wss = wss;
   }
 
+  /**
+   * 核心状态机中心 (State Machine Dispatcher)
+   * 负责收拢所有：物理信号 (C++)、用户指令 (JS)、业务策略 (EOF/Retry)
+   */
+  async transition(event, data) {
+    const prevState = this.lastState;
+    const currentState = this.playback.state;
+
+    switch (event) {
+      case 'ENGINE_STATE_CHANGE':
+        // 1. 处理播放结束 (EOF) -> 自动切歌策略
+        if (currentState === PlayState.STOPPED && prevState !== PlayState.STOPPED) {
+          console.log("🏁 [StateMachine] 检测到 EOF，通过状态机触发自动切歌...");
+          this.next(true);
+        }
+
+        // 2. 处理错误 -> 容错策略
+        if (currentState === PlayState.ERROR) {
+          console.error("❌ [StateMachine] 引擎报错，尝试在 2 秒后重启或跳过...");
+        }
+
+        // 3. 通用状态切换广播
+        this.broadcast({
+          type: "playback_state_change",
+          oldState: prevState,
+          newState: currentState
+        });
+        break;
+
+      case 'USER_LOAD':
+        console.log(`📡 [StateMachine] 用户指令：准备载入 ${data.title}`);
+        break;
+
+      case 'USER_PLAY':
+        console.log("▶️ [StateMachine] 用户指令：播放");
+        break;
+
+      case 'USER_PAUSE':
+        console.log("⏸️ [StateMachine] 用户指令：暂停");
+        break;
+    }
+
+    this.lastState = currentState;
+  }
+
 
   // 在 CoreManager.js 的 initSync 中：
   initSync() {
-    // 1. 高频状态更新 (对应你 C++ 的 StatusUpdate)
-    // 负责：进度广播 (timePos, duration)
+    // 1. 高频状态更新 (进度探测)
     this.engine.setOnStatusUpdate(() => {
-      const currentState = this.view.getInt32(0, true);
-      // 仅在播放或暂停时读取进度并广播
-      if (currentState === 3 || currentState === 4) {
-        const timePos = this.view.getFloat64(8, true);
-        const duration = this.view.getFloat64(16, true);
+      const s = this.playback.state;
+      if (s === PlayState.PLAYING || s === PlayState.PAUSED || s === PlayState.BUFFERING) {
         this.broadcast({
           type: "playback_status",
-          state: currentState,
-          timePos: timePos,
-          duration: duration,
-          // 高频词级进度数据，驱动前端逐字动画，前端无需自己估算
-          lineProgress: this.view.getFloat64(48, true), // offset 48
-          wordIndex: this.view.getInt32(56, true),   // offset 56
-          wordProgress: this.view.getFloat64(64, true), // offset 64
+          ...this.playback.getSnapshot()
         });
       }
     });
 
-    // 2. 状态切换更新 (对应你 C++ 的 StateChange)
-    // 负责：处理 EOF (切歌)、播放/暂停状态切换广播
+    // 2. 状态切换更新 -> 对接状态机
     this.engine.setOnStateChange(() => {
-      const currentState = this.view.getInt32(0, true);
-
-      // 处理播放结束自动切歌
-      if (currentState === 5 && this.lastState !== 5) {
-        console.log("🏁 [KrooveCore] 信号触发：检测到播放结束，自动切歌...");
-        this.next(true);
-      }
-
-      this.lastState = currentState;
+      this.transition('ENGINE_STATE_CHANGE');
     });
 
-    // 3. 歌词换行更新 (对应你 C++ 的 LineChange)
-    // 负责：精准的歌词同步广播，携带完整的行/词状态，前端直接消费
+    // 3. 歌词换行更新
     this.engine.setOnLineChange(() => {
       this.broadcast({
         type: "lyric_line_change",
-        line: this.view.getInt32(40, true),   // 当前行索引  (offset 40)
-        lineProgress: this.view.getFloat64(48, true), // 当前行进度  (offset 48)
-        wordIndex: this.view.getInt32(56, true),   // 当前字索引  (offset 56)
-        wordProgress: this.view.getFloat64(64, true), // 当前字进度  (offset 64)
+        line: this.playback.lineIndex,
+        lineProgress: this.playback.lineProgress,
+        wordIndex: this.playback.wordIndex,
+        wordProgress: this.playback.wordProgress,
       });
     });
   }
@@ -120,8 +195,8 @@ class CoreManager {
       // [Fix] 这里的 currentIndex 已经在 loadAll 中根据 last_played_id 恢复过了
       const lastId = playlist.current();
       if (lastId) {
-        console.log(`🎬 自动恢复上次播放: ID ${lastId}`);
-        this.playById(lastId);
+        console.log(`🎬 自动恢复上次播放: ID ${lastId} (仅载入不播放)`);
+        this.loadById(lastId);
       }
     }
   }
@@ -159,21 +234,38 @@ class CoreManager {
     this.broadcast({ type: "queue_ids", ids: playlist.getQueueIds(), isBroadcast: true });
   }
 
-  playById(id) {
+  _prepareTrack(id) {
     const track = dbManager.getTrackById(id);
-    if (!track) return;
+    if (!track) return null;
 
-    // 1. 更新后端“锁死”的当前播放数据
-    this.currentPlaying = track;
+    // 1. 更新后端播放数据快照
+    this.playback.item = track;
     // 2. 更新列表管理器的游标，确保“下一首”没问题
     playlist.setById(id);
 
-    console.log(`🎶 正在播放: ${track.title} | 歌手: ${track.artist}`);
     const layout = this.engine.load(track.path, track.lrc_path || "");
-    this.lastLayout = layout; // 保存一份供纯同步时下发
-    this.engine.play();
+    this.playback.lyrics = layout; // 保存一份供纯同步时下发
+    
+    return { track, layout };
+  }
 
-    this.broadcastUiUpdate(id, track, layout);
+  playById(id) {
+    const result = this._prepareTrack(id);
+    if (!result) return;
+
+    this.transition('USER_LOAD', result.track);
+    this.transition('USER_PLAY');
+    
+    this.engine.play();
+    this.broadcastUiUpdate(id, result.track, result.layout);
+  }
+
+  loadById(id) {
+    const result = this._prepareTrack(id);
+    if (!result) return;
+
+    this.transition('USER_LOAD', result.track);
+    this.broadcastUiUpdate(id, result.track, result.layout);
   }
 
   broadcastUiUpdate(id, track, layout) {
@@ -214,17 +306,17 @@ class CoreManager {
   }
 
   pause() {
+    this.transition('USER_PAUSE');
     this.engine.pause();
   }
 
   resume() {
-    // 先检查当前底层引擎的状态
-    const currentState = this.view.getInt32(0, true);
+    const s = this.playback.state;
     // 3(通常是播放中) 和 4(通常是已暂停) 的情况下，文件是已经被加载进引擎内存的
-    if (currentState === 3 || currentState === 4) {
+    if (s === PlayState.PLAYING || s === PlayState.PAUSED) {
+      this.transition('USER_PLAY');
       this.engine.play(); // 直接解除暂停即可
     } else {
-      // 否则才算是真正的“冷启动”这首音乐
       const curId = playlist.current();
       if (curId) this.playById(curId);
     }
@@ -240,42 +332,66 @@ class CoreManager {
 
   /**
    * 向指定客户端或全局同步当前全量状态
+   * [Refactor] 支持 targetWs 参数，实现新连入客户端的“一键同步”
    */
-  syncCurrentState() {
-    // 【核心修复】由于 Watcher 只更新了 DB，必须手动让列表管理器重新从数据库载入最新全量轨道
+  syncCurrentState(targetWs = null) {
+    // 1. 确保内存列表是最新的
     playlist.loadAll();
 
-    // 优先从显式维护的 currentPlaying 同步，这比从索引取更安全
-    if (this.currentPlaying) {
-      this.broadcastUiUpdate(this.currentPlaying.id, this.currentPlaying, this.lastLayout);
-    } else {
-      // 如果内存没有，再尝试从持久化索引找回（针对刚开机的场景）
-      const curId = playlist.current();
-      if (curId) {
-        const track = dbManager.getTrackById(curId);
-        if (track) {
-          this.currentPlaying = track;
-          this.broadcastUiUpdate(curId, track, this.lastLayout);
-        }
-      } else {
-        this.broadcast({ type: "ui_empty", message: "曲库为空或未开始播放" });
+    // 2. 准备全量快照
+    const syncData = [
+      {
+        type: "library_folders",
+        folders: this.libraryFolders 
+      },
+      {
+        type: "full_playlist",
+        list: playlist.getFullList() 
+      },
+      {
+        type: "player_config",
+        volume: configManager.get('volume'),
+        playbackMode: playlist.mode
+      },
+      {
+        type: "queue_ids",
+        ids: playlist.getQueueIds()
       }
+    ];
+
+    // 3. 注入当前的播放上下文与状态
+    if (this.playback.item) {
+      const windowIds = playlist.getWindowIds(5, 15);
+      syncData.push({
+        type: "ui_update",
+        id: this.playback.item.id,
+        current: {
+          ...this.playback.item,
+          lyrics: this.playback.lyrics,
+          coverUrl: `http://127.0.0.1:6344/cover-by-id/${this.playback.item.id}`,
+        },
+        window: windowIds.map(wid => {
+           const t = dbManager.getTrackById(wid);
+           return { id: t.id, title: t.title, artist: t.artist, duration: t.duration, coverUrl: `http://127.0.0.1:6344/cover-by-id/${t.id}` };
+        })
+      });
+      // 注入当前进度与状态机状态
+      syncData.push({
+        type: "playback_status",
+        ...this.playback.getSnapshot()
+      });
+    } else {
+      syncData.push({ type: "ui_empty", message: "尚未开始播放" });
     }
-    // 下发一次当前处于监视中的目录状态用于前端渲染
-    this.broadcast({ type: "library_folders", folders: this.libraryFolders });
-    // 下发最新歌单大全
-    this.broadcast({ type: "full_playlist", list: playlist.getFullList() });
-    this.broadcast({
-      type: "player_config",
-      volume: configManager.get('volume'),
-      playbackMode: playlist.mode // 从 playlistManager 获取当前模式
-    });
-    // [New] 下发轻量级 ID 序列，供前端虚拟列表索引
-    this.broadcast({
-      type: "queue_ids",
-      ids: playlist.getQueueIds(),
-      isBroadcast: true
-    });
+
+    // 4. 执行发送
+    if (targetWs) {
+      // 针对单一客户端：通过一次性批量发送减少网络往返
+      syncData.forEach(msg => targetWs.send(JSON.stringify(msg)));
+    } else {
+      // 针对全局广播
+      syncData.forEach(msg => this.broadcast(msg));
+    }
   }
   // coreManager.js
   async updateTrackManual(id, data) {

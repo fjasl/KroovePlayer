@@ -113,6 +113,9 @@ class NetworkManager {
   initWebSocket() {
     this.wss.on("connection", (ws) => {
       console.log("👉 [WS] 集线器：前端 Vue 已连接");
+      
+      // [StateMachine Bonus] 一旦连接，立即同步全量状态快照给该客户端
+      this.core.syncCurrentState(ws);
 
       ws.on("message", (message) => {
         try {
