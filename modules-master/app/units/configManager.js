@@ -10,7 +10,13 @@ const defaultConfig = {
     autoRetrieve: true,
     last_played_id: null,
     playbackMode: 'sequential', // 播放模式
-    volume: 1.0                // 音量
+    volume: 1.0,               // 音量
+    uiState: {                 // [New] 持续化 UI 状态
+        activeSidebarId: 'home',
+        activeTab: 'songs',
+        isFullScreen: false,
+        themeMode: 'dark'
+    }
 };
 
 class ConfigManager {

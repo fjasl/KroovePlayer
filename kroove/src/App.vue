@@ -9,7 +9,6 @@ import LibraryUpdateToast from './component/LibraryUpdateToast.vue'
 
 import { usePlayerStore } from './stores/player'
 
-const currentSidebarId = ref('home')
 const playerStore = usePlayerStore()
 
 // 系统主题检测
@@ -44,10 +43,10 @@ const themeClass = computed(() => {
     <div class="top-layout">
       <!-- 侧边栏预留底座 (48px) -->
       <div class="sidebar-rail">
-        <Sidebar :active-id="currentSidebarId" @update:active-id="currentSidebarId = $event" />
+        <Sidebar :active-id="playerStore.activeSidebarId" @update:active-id="playerStore.activeSidebarId = $event" />
       </div>
       <!-- 主内容区 -->
-      <MainContent :active-sidebar="currentSidebarId" />
+      <MainContent :active-sidebar="playerStore.activeSidebarId" />
     </div>
     <!-- 底部播放栏 -->
     <PlayerBar />

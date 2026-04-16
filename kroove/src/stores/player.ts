@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive } from 'vue'
+import { ref, reactive, watch } from 'vue'
 
 export const usePlayerStore = defineStore('player', () => {
   const isPlaying = ref(false)
@@ -23,6 +23,10 @@ export const usePlayerStore = defineStore('player', () => {
   const scanCount = ref(0)
   const searchQuery = ref('')
   const themeMode = ref<'light' | 'dark' | 'system'>('dark')
+
+  // [New] UI 持续化状态
+  const activeSidebarId = ref('home')
+  const activeTab = ref('songs')
 
   // 接收后端传来的当前曲目源信息
   const currentTrack = reactive({
@@ -132,8 +136,18 @@ export const usePlayerStore = defineStore('player', () => {
 
           // 2. 同步播放模式
           if (data.playbackMode) {
-            isShuffle.value = (data.playbackMode === 'shuffle');
-            isRepeat.value = (data.playbackMode === 'repeat');
+            isShuffle.value = (data.playbackMode === 'shuffle')
+            isRepeat.value = (data.playbackMode === 'repeat')
+          }
+        }
+
+        // [New] 6. UI 状态同步恢复
+        if (data.type === 'ui_state') {
+          if (data.uiState) {
+            if (data.uiState.activeSidebarId) activeSidebarId.value = data.uiState.activeSidebarId
+            if (data.uiState.activeTab) activeTab.value = data.uiState.activeTab
+            if (data.uiState.isFullScreen !== undefined) isFullScreen.value = data.uiState.isFullScreen
+            if (data.uiState.themeMode) themeMode.value = data.uiState.themeMode
           }
         }
 
@@ -203,6 +217,24 @@ export const usePlayerStore = defineStore('player', () => {
 
   const addFolder = (path: string) => sendCommand({ cmd: 'add_folder', path });
   const removeFolder = (path: string) => sendCommand({ cmd: 'remove_folder', path });
+
+  // [New] 同步 UI 状态到后端
+  const syncUiState = () => {
+    sendCommand({
+      cmd: 'set_ui_state',
+      uiState: {
+        activeSidebarId: activeSidebarId.value,
+        activeTab: activeTab.value,
+        isFullScreen: isFullScreen.value,
+        themeMode: themeMode.value
+      }
+    });
+  }
+
+  // 监听关键 UI 状态变动并自动报备
+  watch([activeSidebarId, activeTab, isFullScreen, themeMode], () => {
+    syncUiState();
+  }, { deep: true });
 
   // [New] 批量拉取元数据
   const fetchBatchMetadata = async (ids: number[]) => {
@@ -274,6 +306,9 @@ export const usePlayerStore = defineStore('player', () => {
     removeFolder,
     setDragging,
     toggleMute,
-    toggleFullScreen
+    toggleFullScreen,
+    activeSidebarId,
+    activeTab,
+    syncUiState
   }
 })

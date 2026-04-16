@@ -12,7 +12,6 @@ defineProps<{
 }>()
 
 const playerStore = usePlayerStore()
-const activeTab = ref('songs')
 
 const tabs = [
   { id: 'songs', label: '歌曲' },
@@ -36,7 +35,7 @@ const formatTime = (seconds: number) => {
       <header class="content-header">
         <h1>我的音乐</h1>
         <nav class="tabs">
-          <span v-for="tab in tabs" :key="tab.id" :class="{ active: activeTab === tab.id }" @click="activeTab = tab.id">
+          <span v-for="tab in tabs" :key="tab.id" :class="{ active: playerStore.activeTab === tab.id }" @click="playerStore.activeTab = tab.id">
             {{ tab.label }}
           </span>
         </nav>
@@ -44,7 +43,7 @@ const formatTime = (seconds: number) => {
 
       <div class="content-area">
         <!-- 歌曲列表视图 -->
-        <section v-if="activeTab === 'songs'" class="view-songs">
+        <section v-if="playerStore.activeTab === 'songs'" class="view-songs">
           <div class="empty-hint" v-if="playerStore.fullPlaylist.length === 0">
             <EmptyState />
           </div>

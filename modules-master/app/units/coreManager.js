@@ -354,6 +354,10 @@ class CoreManager {
         playbackMode: playlist.mode
       },
       {
+        type: "ui_state",
+        uiState: configManager.get('uiState')
+      },
+      {
         type: "queue_ids",
         ids: playlist.getQueueIds()
       }
@@ -462,6 +466,11 @@ class CoreManager {
           type: "queue_ids",
           ids: filteredIds
         });
+        break;
+      case "set_ui_state":
+        if (cmd.uiState) {
+          configManager.set('uiState', cmd.uiState);
+        }
         break;
     }
   }
