@@ -17,7 +17,7 @@ export const usePlayerStore = defineStore('player', () => {
   const lineProgress = ref(0)             // 当前行播放进度 0.0~1.0 (后端实时同步)
   const wordIndex = ref(-1)               // 当前字索引 (后端实时同步)
   const wordProgress = ref(0)             // 当前字进度 0.0~1.0 (后端实时同步)
-  
+
   // 库扫描进度状态
   const scanActive = ref(false)
   const scanCount = ref(0)
@@ -73,7 +73,6 @@ export const usePlayerStore = defineStore('player', () => {
       try {
         const data = JSON.parse(event.data);
 
-        // 1. 播放进度刷新 (50ms高压)
         if (data.type === 'playback_status') {
           // 如果用户正在拖拽进度条，不强制通过后端回推抢占光标
           if (!isDraggingProgress) {
@@ -149,12 +148,13 @@ export const usePlayerStore = defineStore('player', () => {
         if (data.type === 'ui_state') {
           if (data.uiState) {
             isInternalUpdate = true; // 开启同步锁
-            
+
             if (data.uiState.activeSidebarId) activeSidebarId.value = data.uiState.activeSidebarId
             if (data.uiState.activeTab) activeTab.value = data.uiState.activeTab
             if (data.uiState.isFullScreen !== undefined) isFullScreen.value = data.uiState.isFullScreen
             if (data.uiState.themeMode) themeMode.value = data.uiState.themeMode
-            
+            if (data.uiState.enableLyricsAnimation !== undefined) enableLyricsAnimation.value = data.uiState.enableLyricsAnimation
+
             // [协同增强] 同步侧边栏展开状态
             if (data.uiState.isSidebarExpanded !== undefined) {
               isSidebarExpanded.value = data.uiState.isSidebarExpanded;
@@ -247,13 +247,14 @@ export const usePlayerStore = defineStore('player', () => {
         isFullScreen: isFullScreen.value,
         themeMode: themeMode.value,
         isSidebarExpanded: isSidebarExpanded.value,
-        searchQuery: searchQuery.value
+        searchQuery: searchQuery.value,
+        enableLyricsAnimation: enableLyricsAnimation.value
       }
     });
   }
 
   // 监听关键 UI 状态变动并自动报备
-  watch([activeSidebarId, activeTab, isFullScreen, themeMode, isSidebarExpanded, searchQuery], () => {
+  watch([activeSidebarId, activeTab, isFullScreen, themeMode, isSidebarExpanded, searchQuery, enableLyricsAnimation], () => {
     if (isInternalUpdate) return; // 如果是来自后端的同步信号，不反馈发送，防止死循环
     syncUiState();
   }, { deep: true });

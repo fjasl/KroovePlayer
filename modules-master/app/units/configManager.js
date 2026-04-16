@@ -15,7 +15,8 @@ const defaultConfig = {
         activeSidebarId: 'home',
         activeTab: 'songs',
         isFullScreen: false,
-        themeMode: 'dark'
+        themeMode: 'dark',
+        enableLyricsAnimation: true
     }
 };
 
