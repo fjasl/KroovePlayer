@@ -332,7 +332,76 @@ class LyricNode {
   }
 }
 
+// --- 频谱多边形精灵 ---
+class PolygonSprite {
+  x: number;
+  y: number;
+  sides: number;
+  radius: number;
+  rotation: number;
+  rotationSpeed: number;
+  opacity: number = 0.8;
+  scale: number = 1.0;
+  maxScale: number;
+  thickness: number;
+
+  constructor(width: number, height: number, sides: number, energy: number) {
+    // 随机分布在中心区域（屏幕宽宽 40%~60% 之间随机，增加散度）
+    const spreadX = width * 0.4;
+    const spreadY = height * 0.4;
+    this.x = (width / 2) + (Math.random() - 0.5) * spreadX;
+    this.y = (height / 2) + (Math.random() - 0.5) * spreadY;
+
+    this.sides = sides;
+    this.radius = 20 + Math.random() * 30; // 基础半径
+    this.rotation = Math.random() * Math.PI * 2;
+    this.rotationSpeed = (Math.random() - 0.5) * 0.04;
+    
+    // 【核心改进】缩放比例与触发时的振幅强度挂钩
+    // 基础倍率 1.2，加上振幅贡献（振幅通常在 0.01-0.2 之间，乘以系数使其具有冲击力）
+    this.maxScale = 1.2 + energy * 10; 
+    
+    this.thickness = 2 + Math.random() * 2;
+  }
+
+  update(dt: number) {
+    this.scale += (this.maxScale - this.scale) * 0.05 * dt;
+    this.opacity -= 0.012 * dt; // 降低消失速度，让肉眼能捕捉到节奏点
+    this.rotation += this.rotationSpeed * dt;
+  }
+
+  draw(ctx: CanvasRenderingContext2D) {
+    if (this.opacity <= 0) return;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
+    ctx.scale(this.scale, this.scale);
+    ctx.globalAlpha = Math.max(0, this.opacity);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = this.thickness / this.scale; // 保持视觉宽度一致
+
+    ctx.beginPath();
+    for (let i = 0; i < this.sides; i++) {
+      const angle = (i * 2 * Math.PI) / this.sides;
+      const px = this.radius * Math.cos(angle);
+      const py = this.radius * Math.sin(angle);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 const activeNodes = ref<LyricNode[]>([]);
+const activePolygons = ref<PolygonSprite[]>([]);
+
+// --- 节奏跟踪状态 ---
+let prevEnergies = { low: 0, mid: 0, high: 0 };
+let lastSpawnTimes = { low: 0, mid: 0, high: 0 };
+const BEAT_COOLDOWN = 120; // 降低冷却时间，支持更密集的节奏
+const ATTACK_THRESHOLD = 1.18; // 降低阈值，让原本不明显的重拍也能触发
 
 const initCanvas = () => {
   if (!lyricCanvasRef.value) return;
@@ -352,16 +421,78 @@ const renderLoop = (timestamp: number) => {
 
   ctx.clearRect(0, 0, lyricCanvasRef.value.width, lyricCanvasRef.value.height);
 
-  for (let i = activeNodes.value.length - 1; i >= 0; i--) {
-    const node = activeNodes.value[i];
-    // 离场节点不追踪词语（传 -1）；活跃节点直接用后端实时 wordIndex
-    const wordIdx = node.isExiting ? -1 : playerStore.wordIndex;
-    node.update(dt, wordIdx);
-    node.draw(ctx);
-    if (node.isExiting && node.opacity < 0.01) {
-      activeNodes.value.splice(i, 1);
+  // --- [歌词渲染逻辑] ---
+  if (playerStore.enableLyricsAnimation) {
+    for (let i = activeNodes.value.length - 1; i >= 0; i--) {
+      const node = activeNodes.value[i];
+      // 离场节点不追踪词语（传 -1）；活跃节点直接用后端实时 wordIndex
+      const wordIdx = node.isExiting ? -1 : playerStore.wordIndex;
+      node.update(dt, wordIdx);
+      node.draw(ctx);
+      if (node.isExiting && node.opacity < 0.01) {
+        activeNodes.value.splice(i, 1);
+      }
     }
   }
+
+  // --- [频谱渲染逻辑] 中心爆裂多边形 ---
+  if (playerStore.enableSpectrum && playerStore.spectrumData.length > 0) {
+    const data = playerStore.spectrumData;
+    const canvas = lyricCanvasRef.value;
+    
+    // 1. 频段能量检测 (采用均值与峰值的加权，提高对瞬态打击乐的敏感度)
+    const getEnergy = (start: number, end: number) => {
+      let sum = 0;
+      let max = 0;
+      for (let i = start; i < end; i++) {
+        sum += data[i];
+        if (data[i] > max) max = data[i];
+      }
+      const avg = sum / (end - start);
+      return avg * 0.7 + max * 0.3; // 混合均值与峰值
+    };
+
+    const lowEnergy = getEnergy(0, 20); // 稍微扩大低频范围
+    const midEnergy = getEnergy(20, 80);
+    const highEnergy = getEnergy(80, 180);
+
+    const now = performance.now();
+
+    // 2. 节奏感知检测：只有在能量产生显著“突变”（Attack）且过了冷却期时才触发
+    if (playerStore.isPlaying) {
+      // 低频重拍（鼓点/基调）
+      if (lowEnergy > 0.01 && lowEnergy > prevEnergies.low * ATTACK_THRESHOLD && (now - lastSpawnTimes.low) > BEAT_COOLDOWN) {
+        activePolygons.value.push(new PolygonSprite(canvas.width, canvas.height, 3 + Math.floor(Math.random() * 2), lowEnergy));
+        lastSpawnTimes.low = now;
+      }
+      // 中频节奏（人声/器乐爆发）
+      if (midEnergy > 0.008 && midEnergy > prevEnergies.mid * ATTACK_THRESHOLD && (now - lastSpawnTimes.mid) > BEAT_COOLDOWN * 1.2) {
+        activePolygons.value.push(new PolygonSprite(canvas.width, canvas.height, 5 + Math.floor(Math.random() * 2), midEnergy));
+        lastSpawnTimes.mid = now;
+      }
+      // 高频点缀（镲片/高音）
+      if (highEnergy > 0.005 && highEnergy > prevEnergies.high * ATTACK_THRESHOLD && (now - lastSpawnTimes.high) > BEAT_COOLDOWN * 1.5) {
+        activePolygons.value.push(new PolygonSprite(canvas.width, canvas.height, 8, highEnergy * 1.2));
+        lastSpawnTimes.high = now;
+      }
+    }
+
+    // 更新历史记录
+    prevEnergies.low = lowEnergy;
+    prevEnergies.mid = midEnergy;
+    prevEnergies.high = highEnergy;
+
+    // 3. 更新并绘制多边形
+    for (let i = activePolygons.value.length - 1; i >= 0; i--) {
+      const poly = activePolygons.value[i];
+      poly.update(dt);
+      poly.draw(ctx);
+      if (poly.opacity <= 0) {
+        activePolygons.value.splice(i, 1);
+      }
+    }
+  }
+
   animationId = requestAnimationFrame(renderLoop);
 };
 
@@ -395,10 +526,10 @@ watch(() => playerStore.isFullScreen, (isFull) => {
     setTimeout(() => {
         initCanvas();
         
-        // 3. 立即提取并校准当前歌词行
+        // 3. 立即提取并校准当前歌词行（仅当开启歌词动画时）
         const currentIdx = playerStore.currentLineIndex;
         const lyricsLines = playerStore.currentTrack?.lyrics?.lines;
-        if (currentIdx >= 0 && lyricsLines && lyricsLines[currentIdx] && ctx && lyricCanvasRef.value) {
+        if (playerStore.enableLyricsAnimation && currentIdx >= 0 && lyricsLines && lyricsLines[currentIdx] && ctx && lyricCanvasRef.value) {
           const lineData = lyricsLines[currentIdx];
           // 用后端 lineProgress 计算行内偏移量，比本地时间差更精准
           const initialElapsed = playerStore.lineProgress * (lineData.duration || 0) * 1000;
@@ -425,10 +556,40 @@ watch(() => playerStore.isFullScreen, (isFull) => {
       animationId = null;
     }
     activeNodes.value = [];
+    activePolygons.value = [];
     isIdle.value = false;
     if (idleTimer) clearTimeout(idleTimer);
   }
 });
+
+// --- [修复] 画布初始化补丁：确保开关切换时画布能正确初始化 ---
+watch(() => (playerStore.enableLyricsAnimation || playerStore.enableSpectrum), (val) => {
+  // 当关闭歌词渲染时，立即清空现有歌词节点
+  if (!playerStore.enableLyricsAnimation) {
+    activeNodes.value = [];
+  }
+
+  if (val && playerStore.isFullScreen) {
+    // 稍作延迟等待 DOM 渲染
+    setTimeout(() => {
+      initCanvas();
+      if (!animationId) {
+        lastTimestamp = performance.now();
+        animationId = requestAnimationFrame(renderLoop);
+      }
+    }, 50);
+  }
+});
+
+// --- 频谱可视化控制器 ---
+watch([() => playerStore.isFullScreen, () => playerStore.enableSpectrum], ([isFull, isSpec]) => {
+  // 只有在全屏且开启了频谱开关时，才向后端请求高频频谱推送
+  playerStore.sendCommand({
+    cmd: 'toggle_visualizer',
+    active: !!(isFull && isSpec),
+    hz: 60
+  });
+}, { immediate: true });
 
 onMounted(() => {
   window.addEventListener('resize', initCanvas);
@@ -451,8 +612,8 @@ onUnmounted(() => {
         <div class="bg-overlay"></div>
       </div>
 
-      <!-- [New] 动态艺术歌词画布层 -->
-      <canvas v-if="playerStore.enableLyricsAnimation" ref="lyricCanvasRef" class="lyrics-canvas"></canvas>
+      <!-- [New] 动态艺术歌词/频谱画布层 -->
+      <canvas v-show="playerStore.enableLyricsAnimation || playerStore.enableSpectrum" ref="lyricCanvasRef" class="lyrics-canvas"></canvas>
 
       <!-- 顶部条 -->
       <header class="top-bar" :class="{ 'is-hidden-top': isIdle }">

@@ -56,6 +56,11 @@ function openLocationDialog() {
             <p class="description">全屏模式下渲染具有动态艺术感的随机歌词</p>
             <GrooveSwitch v-model="playerStore.enableLyricsAnimation" />
           </div>
+          
+          <div class="option-block">
+            <p class="description">全屏模式下渲染具有律动感的音频频谱</p>
+            <GrooveSwitch v-model="playerStore.enableSpectrum" />
+          </div>
         </section>
 
         <section class="settings-section">
