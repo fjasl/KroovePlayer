@@ -16,6 +16,8 @@ class LibraryManager {
         this.scanCount = 0; // 当前“突发”扫描的文件总数
         this.isScanning = false;
         this.onScanStatus = null; // 用于通知上层的回调
+        this.scanType = 'add';   // 'add' | 'remove' | 'update'
+        this.lastFile = '';      // 当前正在处理的文件名
     }
 
     /**
@@ -24,10 +26,17 @@ class LibraryManager {
     async scanAll() {
         const folders = configManager.get('libraryFolders') || [];
         console.log(`🚀 开始扫描 ${folders.length} 个库目录...`);
+        this.isScanning = true;
+        this.scanCount = 0;
+        
+        if (this.onScanStatus) this.onScanStatus(true, 0, 'add', '正在初始化...');
 
         for (const folder of folders) {
             await this.scanDirectory(folder);
         }
+        
+        this.isScanning = false;
+        if (this.onScanStatus) this.onScanStatus(false, this.scanCount, 'add', '扫描完成');
         console.log("✅ 库扫描完成！");
     }
 
@@ -39,8 +48,14 @@ class LibraryManager {
             const fullPath = path.resolve(dir, entry.name);
             if (entry.isDirectory()) {
                 await this.scanDirectory(fullPath);
-            } else if (entry.name.toLowerCase().endsWith('.mp3')) {
-                await this.processTrack(fullPath);
+            } else if (this.isAudioFile(fullPath)) {
+                const isNew = await this.processTrack(fullPath);
+                if (isNew) {
+                    this.scanCount++;
+                    if (this.onScanStatus && this.scanCount % 5 === 0) {
+                        this.onScanStatus(true, this.scanCount, 'add', entry.name);
+                    }
+                }
             }
         }
     }
@@ -54,7 +69,7 @@ class LibraryManager {
             // 1. 增量检查：如果该文件已存在且 mtime/size 没变过，直接跳过
             const existing = dbManager.db.prepare('SELECT * FROM tracks WHERE path = ?').get(filePath);
             if (existing && existing.file_mtime === mtime && existing.file_size === size) {
-                return;
+                return false; // 无变动
             }
 
             console.log(`🔍 正在解析: ${path.basename(filePath)}`);
@@ -112,6 +127,7 @@ class LibraryManager {
                 mtime,
                 size
             );
+            return true; // 确实有变动或新增
 
         } catch (e) {
             console.error(`❌ 解析 ${filePath} 出错:`, e.message);
@@ -140,53 +156,56 @@ class LibraryManager {
             }
         });
 
-        const triggerChange = () => {
-            if (this.onScanStatus) this.onScanStatus(true, this.scanCount);
+        const triggerChange = (type = 'add', fileName = '') => {
+            this.isScanning = true;
+            this.scanCount++; 
+            if (this.onScanStatus) this.onScanStatus(true, this.scanCount, type, fileName);
 
             if (this.notifyTimer) clearTimeout(this.notifyTimer);
             this.notifyTimer = setTimeout(() => {
-                console.log("🔄 [Watcher] 检测到库显著变动，正在通知系统同步...");
+                console.log(`🔄 [Watcher] ${type} 扫描周期结束，正在通知系统同步...`);
                 this.isScanning = false;
-                if (this.onScanStatus) this.onScanStatus(false, this.scanCount);
+                if (this.onScanStatus) this.onScanStatus(false, this.scanCount, type, fileName);
                 if (onLibraryChanged) onLibraryChanged();
                 this.scanCount = 0; // 结算后清零
-            }, 3000); // 扫描稳定 3 秒后关闭通知
+            }, 3000); 
         };
 
         this.watcher
             .on('add', async filePath => {
+                const fileName = path.basename(filePath);
                 if (this.isAudioFile(filePath)) {
-                    this.isScanning = true;
-                    this.scanCount++;
-                    console.log(`➕ [Watcher] 发现新曲目: ${path.basename(filePath)}`);
+                    console.log(`➕ [Watcher] 发现新曲目: ${fileName}`);
                     await this.processTrack(filePath);
-                    triggerChange();
+                    triggerChange('add', fileName);
                 } else if (filePath.toLowerCase().endsWith('.lrc')) {
-                    console.log(`📜 [Watcher] 发现新歌词: ${path.basename(filePath)}，正在尝试匹配音频...`);
+                    console.log(`📜 [Watcher] 发现新歌词: ${fileName}，正在尝试匹配音频...`);
                     await this.reprocessDirectory(path.dirname(filePath));
-                    triggerChange();
+                    triggerChange('update', fileName);
                 }
             })
             .on('change', async filePath => {
+                const fileName = path.basename(filePath);
                 if (this.isAudioFile(filePath)) {
-                    console.log(`📝 [Watcher] 更新曲目: ${path.basename(filePath)}`);
+                    console.log(`📝 [Watcher] 更新曲目: ${fileName}`);
                     await this.processTrack(filePath);
-                    triggerChange();
+                    triggerChange('update', fileName);
                 } else if (filePath.toLowerCase().endsWith('.lrc')) {
-                    console.log(`📝 [Watcher] 歌词内容变动: ${path.basename(filePath)}，重新关联同目录曲目...`);
+                    console.log(`📝 [Watcher] 歌词内容变动: ${fileName}，重新关联同目录曲目...`);
                     await this.reprocessDirectory(path.dirname(filePath));
-                    triggerChange();
+                    triggerChange('update', fileName);
                 }
             })
             .on('unlink', filePath => {
+                const fileName = path.basename(filePath);
                 if (this.isAudioFile(filePath)) {
-                    console.log(`➖ [Watcher] 物理删除: ${path.basename(filePath)}`);
+                    console.log(`➖ [Watcher] 物理删除: ${fileName}`);
                     dbManager.removeTrackByPath(filePath);
-                    triggerChange();
+                    triggerChange('remove', fileName);
                 } else if (filePath.toLowerCase().endsWith('.lrc')) {
-                    console.log(`➖ [Watcher] 歌词删除: ${path.basename(filePath)}，更新同目录曲目关联...`);
+                    console.log(`➖ [Watcher] 歌词删除: ${fileName}，更新同目录曲目关联...`);
                     this.reprocessDirectory(path.dirname(filePath));
-                    triggerChange();
+                    triggerChange('update', fileName);
                 }
             });
     }

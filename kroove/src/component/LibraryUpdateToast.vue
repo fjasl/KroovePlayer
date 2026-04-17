@@ -2,14 +2,20 @@
   <Transition name="toast">
     <div v-if="isVisible" class="library-toast">
       <div class="toast-content">
-        <!-- 扫描图标 (旋转动画) -->
-        <div class="icon-sync">
-          <IconRepeatSync class="rotating" />
+        <!-- 核心状态图标 -->
+        <div class="icon-section">
+          <IconRepeatSync class="icon-sync rotating" />
         </div>
 
         <div class="text-info">
-          <div class="title">正在添加音乐</div>
-          <div class="subtitle">{{ playerStore.scanCount }} 首歌曲</div>
+          <div class="title">{{ displayTitle }}</div>
+          <div class="subtitle">
+            <Transition name="fade" mode="out-in">
+              <span :key="playerStore.scanLastFile || playerStore.scanCount">
+                {{ displaySubtitle }}
+              </span>
+            </Transition>
+          </div>
         </div>
 
         <!-- 关闭按钮 -->
@@ -34,7 +40,19 @@ const isVisible = computed(() => {
   return playerStore.scanActive && !isUserClosed.value;
 });
 
-// 当扫描重启时，重置用户关闭状态
+const displayTitle = computed(() => {
+  switch (playerStore.scanType) {
+    case 'remove': return '正在移除曲目';
+    case 'update': return '正在同步资源';
+    case 'add': 
+    default: return '正在添加曲目';
+  }
+});
+
+const displaySubtitle = computed(() => {
+  return `${playerStore.scanCount} 首曲目`;
+});
+
 watch(() => playerStore.scanActive, (newVal) => {
   if (newVal) isUserClosed.value = false;
 });
@@ -49,29 +67,41 @@ const handleManualClose = () => {
   position: absolute;
   top: 24px; 
   right: 24px;
-  background: #004a87; /* 蓝调背景 */
+  
+  /* 统一背景色：使用标准 Windows 蓝 */
+  background: #0078d4; 
   color: white;
-  min-width: 280px;
-  padding: 14px 18px;
-  border-radius: 4px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  z-index: 1000;
-  border-left: 4px solid #0078d4;
-  backdrop-filter: blur(10px);
+  min-width: 320px;
+  padding: 12px 16px;
+  border-radius: 0;
+  
+
+  z-index: 2000;
+  border: none;
+  
+  /* 确保没有任何左侧边距溢出或残留 */
+  display: flex;
+  align-items: center;
 }
 
 .toast-content {
   display: flex;
   align-items: center;
-  gap: 16px;
-  position: relative;
+  gap: 12px;
+  width: 100%;
+}
+
+.icon-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: transparent; /* 强制透明，防止色差 */
 }
 
 .icon-sync {
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-  opacity: 0.9;
+  width: 18px;
+  height: 18px;
 }
 
 .rotating {
@@ -81,24 +111,26 @@ const handleManualClose = () => {
 .text-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  flex: 1;
+  min-width: 0;
 }
 
 .title {
   font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  font-weight: 400;
+  margin: 0;
 }
 
 .subtitle {
   font-size: 12px;
-  opacity: 0.8;
+  opacity: 0.85;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .btn-close {
-  position: absolute;
-  right: -6px;
-  top: 0px;
   background: transparent;
   border: none;
   color: white;
@@ -106,8 +138,8 @@ const handleManualClose = () => {
   height: 24px;
   cursor: pointer;
   padding: 4px;
-  opacity: 0.6;
-  transition: opacity 0.2s;
+  opacity: 0.7;
+  transition: opacity 0.2;
 }
 
 .btn-close:hover {
@@ -119,15 +151,24 @@ const handleManualClose = () => {
   to { transform: rotate(360deg); }
 }
 
-/* 动画过度 */
+/* 进场动画 */
 .toast-enter-active,
 .toast-leave-active {
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: all 0.3s ease;
 }
 
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;
-  transform: translateX(40px) scale(0.9);
+  transform: translateX(20px);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

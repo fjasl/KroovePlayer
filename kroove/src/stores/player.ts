@@ -23,6 +23,8 @@ export const usePlayerStore = defineStore('player', () => {
   // 库扫描进度状态
   const scanActive = ref(false)
   const scanCount = ref(0)
+  const scanType = ref<'add' | 'remove' | 'update'>('add')
+  const scanLastFile = ref('')
   const searchQuery = ref('')
   const themeMode = ref<'light' | 'dark' | 'system'>('dark')
 
@@ -189,7 +191,13 @@ export const usePlayerStore = defineStore('player', () => {
         // 5. 处理库扫描进度
         if (data.type === 'library_scan_status') {
           scanActive.value = data.active;
-          scanCount.value = data.count;
+          scanCount.value = data.count || 0;
+          if (data.scanType) {
+            scanType.value = data.scanType;
+          }
+          if (data.lastFile) {
+            scanLastFile.value = data.lastFile;
+          }
         }
       } catch (e) {
         console.warn('Socket message parse err:', e);
@@ -319,6 +327,8 @@ export const usePlayerStore = defineStore('player', () => {
     wordProgress,
     scanActive,
     scanCount,
+    scanType,
+    scanLastFile,
     searchQuery,
     themeMode,
     enableSpectrum,

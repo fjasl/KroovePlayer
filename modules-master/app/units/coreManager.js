@@ -211,11 +211,13 @@ class CoreManager {
       await libraryManager.scanAll();
 
       // [New] 绑定扫描状态回调：向前端推送正在添加歌曲的通知
-      libraryManager.onScanStatus = (active, count) => {
+      libraryManager.onScanStatus = (active, count, scanType, lastFile) => {
         this.broadcast({
           type: "library_scan_status",
           active: active,
-          count: count
+          count: count,
+          scanType: scanType,
+          lastFile: lastFile
         });
       };
 
@@ -400,7 +402,8 @@ class CoreManager {
       },
       {
         type: "queue_ids",
-        ids: playlist.getQueueIds()
+        ids: playlist.getQueueIds(),
+        isBroadcast: true
       }
     ];
 

@@ -77,13 +77,13 @@ class WordSprite {
   start: number;
   duration: number;
   opacity: number = 0;
-  
+
   // 散点定位系统
   targetRelX: number = 0; // 相对于行中心的最终 X
   targetRelY: number = 0; // 相对于行基线的最终 Y
   originX: number = 0;    // 组装起点 X
   originY: number = 0;    // 组装起点 Y
-  
+
   currentX: number = 0;
   currentY: number = 0;
 
@@ -101,14 +101,14 @@ class WordSprite {
   initOrigin(style: EntranceStyle) {
     const range = 150;
     if (style === 'BLAST') {
-       this.originX = this.targetRelX * 2;
-       this.originY = this.targetRelY * 2;
+      this.originX = this.targetRelX * 2;
+      this.originY = this.targetRelY * 2;
     } else if (style === 'GLIDE_UP') {
-       this.originX = this.targetRelX;
-       this.originY = this.targetRelY + range;
+      this.originX = this.targetRelX;
+      this.originY = this.targetRelY + range;
     } else {
-       this.originX = this.targetRelX + (Math.random() - 0.5) * range;
-       this.originY = this.targetRelY + (Math.random() - 0.5) * range;
+      this.originX = this.targetRelX + (Math.random() - 0.5) * range;
+      this.originY = this.targetRelY + (Math.random() - 0.5) * range;
     }
     this.currentX = this.originX;
     this.currentY = this.originY;
@@ -122,7 +122,7 @@ class WordSprite {
     if (!isExiting) {
       // 组放过程：带 Stagger 延迟的指数衰减
       const assemblyElapsed = Math.max(0, elapsed - this.assemblyDelay);
-      
+
       // 【核心修复】如果该词早就该入场了（差距超过 500ms），直接跳过动画进入锁定位置
       if (assemblyElapsed > 500) {
         this.currentX = this.targetRelX;
@@ -138,11 +138,11 @@ class WordSprite {
       // 溃散过程
       this.opacity *= 0.9;
       if (exitStyle === 'SHATTER') {
-         this.currentY += 5;
-         this.currentX += (Math.random() - 0.5) * 4;
+        this.currentY += 5;
+        this.currentX += (Math.random() - 0.5) * 4;
       } else {
-         this.currentX += (this.targetRelX) * 0.1;
-         this.currentY += (this.targetRelY) * 0.1;
+        this.currentX += (this.targetRelX) * 0.1;
+        this.currentY += (this.targetRelY) * 0.1;
       }
     }
   }
@@ -167,7 +167,7 @@ class LyricNode {
   rotation: number = 0;
   isExiting: boolean = false;
   fontSize: number;
-  
+
   // 追踪光标系统
   trackX: number = 0;
   trackY: number = 0;
@@ -183,12 +183,12 @@ class LyricNode {
   constructor(lineData: any, canvasWidth: number, canvasHeight: number, tempCtx: CanvasRenderingContext2D, initialElapsed: number = 0) {
     this.text = lineData.text;
     this.startTime = performance.now() - initialElapsed;
-    this.fontSize = 42; 
-    
+    this.fontSize = 42;
+
     // 基础中心点
     this.x = canvasWidth / 2;
     this.y = canvasHeight / 2 + (Math.random() - 0.5) * 40;
-    
+
     // 随机风格
     const entrances: EntranceStyle[] = ['BLAST', 'GLIDE_UP', 'ZOOM_IN', 'ROLL_IN'];
     const exits: ExitStyle[] = ['SMOKE', 'SHATTER', 'VORTEX', 'FLIP_OUT'];
@@ -198,11 +198,11 @@ class LyricNode {
     // 【核心核心】散点布局算法
     if (lineData.words && lineData.words.length > 0) {
       tempCtx.font = `bold ${this.fontSize}px sans-serif`;
-      
+
       let totalW = 0;
       const wordWidths: number[] = [];
       const gaps: number[] = [];
-      
+
       // 1. 预计算总宽度和随机间距
       lineData.words.forEach((w: any) => {
         const wWidth = tempCtx.measureText(w.text).width;
@@ -236,9 +236,9 @@ class LyricNode {
 
     // 初始化光标位置到第一个词，避免突发跳变
     if (this.words.length > 0) {
-       this.trackX = this.words[0].originX;
-       this.trackY = this.words[0].originY;
-       this.trackW = 20;
+      this.trackX = this.words[0].originX;
+      this.trackY = this.words[0].originY;
+      this.trackW = 20;
     }
   }
 
@@ -266,12 +266,12 @@ class LyricNode {
 
     if (currentActiveWord) {
       this.trackOpacity += (1 - this.trackOpacity) * 0.1;
-      
+
       // 【关键修复】如果该行是中途切入的第一帧，光标直接"瞬移"到对应词，不要滑行
       if (this.isFirstUpdate) {
         this.trackX = currentActiveWord.currentX;
         this.trackY = currentActiveWord.currentY;
-        this.isFirstUpdate = false; 
+        this.isFirstUpdate = false;
       } else {
         // 增加安全检查，防止 dt 异常
         const safeDt = Number.isFinite(dt) ? dt : 1;
@@ -289,7 +289,7 @@ class LyricNode {
     ctx.translate(this.x, this.y);
     ctx.rotate(this.rotation);
     ctx.globalAlpha = Math.max(0, this.opacity);
-    
+
     ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
     ctx.shadowBlur = 12;
     ctx.font = `bold ${this.fontSize}px sans-serif`;
@@ -304,20 +304,20 @@ class LyricNode {
       const activeWord = this.activeWordIndex >= 0 && this.activeWordIndex < this.words.length
         ? this.words[this.activeWordIndex] : null;
       if (activeWord) {
-         activeW = ctx.measureText(activeWord.text).width + 16;
-         // 平滑宽度变化
-         this.trackW += (activeW - this.trackW) * 0.2;
+        activeW = ctx.measureText(activeWord.text).width + 16;
+        // 平滑宽度变化
+        this.trackW += (activeW - this.trackW) * 0.2;
       }
 
       ctx.save();
       ctx.translate(this.trackX, this.trackY);
       ctx.globalAlpha = this.opacity * this.trackOpacity * 0.35;
       ctx.fillStyle = '#fff';
-      
+
       // 添加类似终端光标的微弱光晕
       ctx.shadowBlur = 10;
       ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
-      
+
       const height = this.fontSize * 1.1;
       ctx.beginPath();
       ctx.roundRect(-this.trackW / 2, -height / 1.5, this.trackW, height, 4);
@@ -327,7 +327,7 @@ class LyricNode {
 
     // B. 委派给每个词自己的绘制逻辑
     this.words.forEach(w => w.draw(ctx, this.opacity));
-    
+
     ctx.restore();
   }
 }
@@ -356,11 +356,11 @@ class PolygonSprite {
     this.radius = 20 + Math.random() * 30; // 基础半径
     this.rotation = Math.random() * Math.PI * 2;
     this.rotationSpeed = (Math.random() - 0.5) * 0.04;
-    
+
     // 【核心改进】缩放比例与触发时的振幅强度挂钩
     // 基础倍率 1.2，加上振幅贡献（振幅通常在 0.01-0.2 之间，乘以系数使其具有冲击力）
-    this.maxScale = 1.2 + energy * 10; 
-    
+    this.maxScale = 1.2 + energy * 10;
+
     this.thickness = 2 + Math.random() * 2;
   }
 
@@ -397,11 +397,13 @@ class PolygonSprite {
 const activeNodes = ref<LyricNode[]>([]);
 const activePolygons = ref<PolygonSprite[]>([]);
 
-// --- 节奏跟踪状态 ---
-let prevEnergies = { low: 0, mid: 0, high: 0 };
+// --- 节奏跟踪状态 (自适应包络 + 差分检测) ---
+let smoothedEnergies = { low: 0, mid: 0, high: 0 };
+let lastEnergies = { low: 0, mid: 0, high: 0 }; // 用于上升沿检测
 let lastSpawnTimes = { low: 0, mid: 0, high: 0 };
-const BEAT_COOLDOWN = 120; // 降低冷却时间，支持更密集的节奏
-const ATTACK_THRESHOLD = 1.18; // 降低阈值，让原本不明显的重拍也能触发
+
+const BEAT_COOLDOWN = 60;     // 降低冷却，捕捉双踩
+const SMOOTH_FACTOR_FAST = 0.88; // 加快回落速度，应对高能转场
 
 const initCanvas = () => {
   if (!lyricCanvasRef.value) return;
@@ -413,7 +415,7 @@ const initCanvas = () => {
 
 const renderLoop = (timestamp: number) => {
   if (!ctx || !lyricCanvasRef.value) return;
-  
+
   // 【核心修复】增加容错，防止通过 renderLoop() 手动调用时 timestamp 为 undefined 导致 dt 为 NaN
   const safeTimestamp = timestamp || performance.now();
   const dt = (safeTimestamp - lastTimestamp) / 16.67;
@@ -439,48 +441,62 @@ const renderLoop = (timestamp: number) => {
   if (playerStore.enableSpectrum && playerStore.spectrumData.length > 0) {
     const data = playerStore.spectrumData;
     const canvas = lyricCanvasRef.value;
-    
-    // 1. 频段能量检测 (采用均值与峰值的加权，提高对瞬态打击乐的敏感度)
-    const getEnergy = (start: number, end: number) => {
-      let sum = 0;
+
+    // 1. 获取频段峰值 (比起均值更能体现打击感)
+    const getPeak = (start: number, end: number) => {
       let max = 0;
       for (let i = start; i < end; i++) {
-        sum += data[i];
         if (data[i] > max) max = data[i];
       }
-      const avg = sum / (end - start);
-      return avg * 0.7 + max * 0.3; // 混合均值与峰值
+      return max;
     };
 
-    const lowEnergy = getEnergy(0, 20); // 稍微扩大低频范围
-    const midEnergy = getEnergy(20, 80);
-    const highEnergy = getEnergy(80, 180);
+    const lowPeak = getPeak(0, 15);
+    const midPeak = getPeak(15, 60);
+    const highPeak = getPeak(60, 180);
 
     const now = performance.now();
 
-    // 2. 节奏感知检测：只有在能量产生显著“突变”（Attack）且过了冷却期时才触发
+    // 2. 自适应频率检测逻辑
     if (playerStore.isPlaying) {
-      // 低频重拍（鼓点/基调）
-      if (lowEnergy > 0.01 && lowEnergy > prevEnergies.low * ATTACK_THRESHOLD && (now - lastSpawnTimes.low) > BEAT_COOLDOWN) {
-        activePolygons.value.push(new PolygonSprite(canvas.width, canvas.height, 3 + Math.floor(Math.random() * 2), lowEnergy));
-        lastSpawnTimes.low = now;
+      const checkBeat = (current: number, band: 'low' | 'mid' | 'high', minEnergy: number) => {
+        // 1. 指数移动平均包络 (自适应背景)
+        smoothedEnergies[band] = (smoothedEnergies[band] * SMOOTH_FACTOR_FAST) + (current * (1 - SMOOTH_FACTOR_FAST));
+
+        // 2. 上升沿激发检测 (差分检测)
+        const last = lastEnergies[band];
+        const delta = current - last;
+        const deltaThreshold = Math.max(minEnergy * 2, last * 0.4); 
+
+        // 条件 A: 峰值比例检测
+        const peakCondition = current > minEnergy && current > smoothedEnergies[band] * 1.3;
+        // 条件 B: 能量暴涨检测 (Rising Edge)
+        const deltaCondition = current > minEnergy && delta > deltaThreshold;
+
+        let isBeat = false;
+        if ((peakCondition || deltaCondition) && (now - lastSpawnTimes[band]) > BEAT_COOLDOWN) {
+          lastSpawnTimes[band] = now;
+          isBeat = true;
+        }
+
+        // 更新历史记录（关键：在返回前更新）
+        lastEnergies[band] = current;
+        return isBeat;
+      };
+
+      // 低频：底鼓/基调
+      if (checkBeat(lowPeak, 'low', 0.005)) {
+        activePolygons.value.push(new PolygonSprite(canvas.width, canvas.height, 3 + Math.floor(Math.random() * 2), lowPeak));
       }
-      // 中频节奏（人声/器乐爆发）
-      if (midEnergy > 0.008 && midEnergy > prevEnergies.mid * ATTACK_THRESHOLD && (now - lastSpawnTimes.mid) > BEAT_COOLDOWN * 1.2) {
-        activePolygons.value.push(new PolygonSprite(canvas.width, canvas.height, 5 + Math.floor(Math.random() * 2), midEnergy));
-        lastSpawnTimes.mid = now;
+      // 中频：军鼓/打击乐
+      if (checkBeat(midPeak, 'mid', 0.004)) {
+        activePolygons.value.push(new PolygonSprite(canvas.width, canvas.height, 5 + Math.floor(Math.random() * 2), midPeak));
       }
-      // 高频点缀（镲片/高音）
-      if (highEnergy > 0.005 && highEnergy > prevEnergies.high * ATTACK_THRESHOLD && (now - lastSpawnTimes.high) > BEAT_COOLDOWN * 1.5) {
-        activePolygons.value.push(new PolygonSprite(canvas.width, canvas.height, 8, highEnergy * 1.2));
-        lastSpawnTimes.high = now;
+      // 高频：点缀/镲片
+      if (checkBeat(highPeak, 'high', 0.003)) {
+        activePolygons.value.push(new PolygonSprite(canvas.width, canvas.height, 8, highPeak * 1.2));
       }
     }
-
-    // 更新历史记录
-    prevEnergies.low = lowEnergy;
-    prevEnergies.mid = midEnergy;
-    prevEnergies.high = highEnergy;
 
     // 3. 更新并绘制多边形
     for (let i = activePolygons.value.length - 1; i >= 0; i--) {
@@ -499,7 +515,7 @@ const renderLoop = (timestamp: number) => {
 // 监听歌词行变更（由后端 lyric_line_change 精准驱动），注入新粒子
 watch(() => playerStore.currentLineIndex, (newIdx) => {
   if (!playerStore.enableLyricsAnimation || newIdx === -1) return;
-  
+
   const lyricsLines = playerStore.currentTrack?.lyrics?.lines;
   if (!lyricsLines || !lyricsLines[newIdx]) return;
 
@@ -521,33 +537,33 @@ watch(() => playerStore.isFullScreen, (isFull) => {
   if (isFull) {
     // 1. 重置闲置计时器
     resetIdleTimer();
-    
+
     // 2. 延迟初始化画布（等待 DOM 过渡完成）
     setTimeout(() => {
-        initCanvas();
-        
-        // 3. 立即提取并校准当前歌词行（仅当开启歌词动画时）
-        const currentIdx = playerStore.currentLineIndex;
-        const lyricsLines = playerStore.currentTrack?.lyrics?.lines;
-        if (playerStore.enableLyricsAnimation && currentIdx >= 0 && lyricsLines && lyricsLines[currentIdx] && ctx && lyricCanvasRef.value) {
-          const lineData = lyricsLines[currentIdx];
-          // 用后端 lineProgress 计算行内偏移量，比本地时间差更精准
-          const initialElapsed = playerStore.lineProgress * (lineData.duration || 0) * 1000;
-          const node = new LyricNode(
-            lineData, 
-            lyricCanvasRef.value.width, 
-            lyricCanvasRef.value.height, 
-            ctx, 
-            Math.max(0, initialElapsed)
-          );
-          activeNodes.value = [node];
-        }
+      initCanvas();
 
-        // 4. 安全启动渲染主循环
-        if (!animationId) {
-          lastTimestamp = performance.now();
-          animationId = requestAnimationFrame(renderLoop);
-        }
+      // 3. 立即提取并校准当前歌词行（仅当开启歌词动画时）
+      const currentIdx = playerStore.currentLineIndex;
+      const lyricsLines = playerStore.currentTrack?.lyrics?.lines;
+      if (playerStore.enableLyricsAnimation && currentIdx >= 0 && lyricsLines && lyricsLines[currentIdx] && ctx && lyricCanvasRef.value) {
+        const lineData = lyricsLines[currentIdx];
+        // 用后端 lineProgress 计算行内偏移量，比本地时间差更精准
+        const initialElapsed = playerStore.lineProgress * (lineData.duration || 0) * 1000;
+        const node = new LyricNode(
+          lineData,
+          lyricCanvasRef.value.width,
+          lyricCanvasRef.value.height,
+          ctx,
+          Math.max(0, initialElapsed)
+        );
+        activeNodes.value = [node];
+      }
+
+      // 4. 安全启动渲染主循环
+      if (!animationId) {
+        lastTimestamp = performance.now();
+        animationId = requestAnimationFrame(renderLoop);
+      }
     }, 150);
   } else {
     // 退出逻辑
@@ -613,7 +629,8 @@ onUnmounted(() => {
       </div>
 
       <!-- [New] 动态艺术歌词/频谱画布层 -->
-      <canvas v-show="playerStore.enableLyricsAnimation || playerStore.enableSpectrum" ref="lyricCanvasRef" class="lyrics-canvas"></canvas>
+      <canvas v-show="playerStore.enableLyricsAnimation || playerStore.enableSpectrum" ref="lyricCanvasRef"
+        class="lyrics-canvas"></canvas>
 
       <!-- 顶部条 -->
       <header class="top-bar" :class="{ 'is-hidden-top': isIdle }">
@@ -723,8 +740,10 @@ onUnmounted(() => {
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 5; /* 位于背景之上，控件之下 */
-  pointer-events: none; /* 不干扰点击 */
+  z-index: 5;
+  /* 位于背景之上，控件之下 */
+  pointer-events: none;
+  /* 不干扰点击 */
 }
 
 .bg-image {
