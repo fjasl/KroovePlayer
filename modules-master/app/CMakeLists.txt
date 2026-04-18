@@ -16,9 +16,10 @@ else()
     # 兼容原 Linux 环境
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(MPV REQUIRED mpv)
+    pkg_check_modules(PULSE REQUIRED libpulse libpulse-simple)
 endif()
 
-include_directories(${CMAKE_JS_INC} ${MPV_INCLUDE_DIRS})
+include_directories(${CMAKE_JS_INC} ${MPV_INCLUDE_DIRS} ${PULSE_INCLUDE_DIRS})
 
 execute_process(COMMAND node -p "require('node-addon-api').include"
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
@@ -44,7 +45,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/wrappers/engine
 )
 target_link_directories(${PROJECT_NAME} PRIVATE ${MPV_LIBRARY_DIRS})
-target_link_libraries(${PROJECT_NAME} PRIVATE ${MPV_LIBRARIES} ${CMAKE_JS_LIB})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${MPV_LIBRARIES} ${PULSE_LIBRARIES} ${CMAKE_JS_LIB})
 
 # target_compile_definitions(${PROJECT_NAME} PRIVATE NAPI_DISABLE_CPP_EXCEPTIONS)
 

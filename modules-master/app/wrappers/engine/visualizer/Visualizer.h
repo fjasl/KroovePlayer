@@ -1,8 +1,14 @@
 #pragma once
 
+#ifdef _WIN32
 #include <windows.h>
 #include <audioclient.h>
 #include <mmdeviceapi.h>
+#else
+#include <pulse/simple.h>
+#include <pulse/error.h>
+#endif
+
 #include <vector>
 #include <atomic>
 #include <thread>
@@ -35,9 +41,13 @@ private:
 
     std::vector<float> m_hannWindow;
     
+#ifdef _WIN32
     IAudioCaptureClient* m_captureClient = nullptr;
     IAudioClient* m_audioClient = nullptr;
     WAVEFORMATEX* m_pwfx = nullptr;
+#else
+    pa_simple* m_pulseClient = nullptr;
+#endif
 };
 
 } // namespace visualizer

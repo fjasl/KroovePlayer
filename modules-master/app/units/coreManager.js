@@ -5,6 +5,7 @@ const dbManager = require("./dbManager");
 const libraryManager = require("./libraryManager");
 const playlist = require("./playlistManager");
 const configManager = require("./configManager"); // 引入 JSON 配置
+const MediaControlManager = require("./mediaControlManager");
 
 // ==========================================
 // --- 核心播放状态枚举 (与 C++ 保持一致) ---
@@ -88,6 +89,7 @@ class CoreManager {
     global._engineRef = this.engine;
 
     this.initSync();
+    this.mediaControl = new MediaControlManager(this);
   }
 
   // [New] 独立的频谱广播任务
@@ -177,12 +179,16 @@ class CoreManager {
           type: "playback_status",
           ...this.playback.getSnapshot()
         });
+
+        // 同步给 MPRIS (系统媒体控制)
+        if (this.mediaControl) this.mediaControl.updatePosition();
       }
     });
 
     // 2. 状态切换更新 -> 对接状态机
     this.engine.setOnStateChange(() => {
       this.transition('ENGINE_STATE_CHANGE');
+      if (this.mediaControl) this.mediaControl.updateStatus();
     });
 
     // 3. 歌词换行更新
@@ -312,6 +318,7 @@ class CoreManager {
   }
 
   broadcastUiUpdate(id, track, layout) {
+    if (this.mediaControl) this.mediaControl.updateMetadata(track);
     const windowIds = playlist.getWindowIds(5, 15);
     const windowMetadata = windowIds.map((wid) => {
       const t = dbManager.getTrackById(wid);

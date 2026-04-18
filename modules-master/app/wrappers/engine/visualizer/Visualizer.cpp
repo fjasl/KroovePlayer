@@ -1,5 +1,10 @@
 #include "Visualizer.h"
+#ifdef _WIN32
 #include <audioclientactivationparams.h>
+#else
+#include <unistd.h>
+#include <cstdio>
+#endif
 #include <math.h>
 #include <algorithm>
 
@@ -37,8 +42,12 @@ bool Visualizer::start(float* spectrumBuffer, int binCount) {
 void Visualizer::stop() {
     m_running = false;
     if (m_thread.joinable()) m_thread.join();
+#ifdef _WIN32
     if (m_captureClient) { m_captureClient->Release(); m_captureClient = nullptr; }
     if (m_audioClient) { m_audioClient->Release(); m_audioClient = nullptr; }
+#else
+    if (m_pulseClient) { pa_simple_free(m_pulseClient); m_pulseClient = nullptr; }
+#endif
 }
 
 void Visualizer::processFFT(const float* input, int count) {
@@ -89,6 +98,7 @@ void Visualizer::processFFT(const float* input, int count) {
 }
 
 void Visualizer::captureLoop() {
+#ifdef _WIN32
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
     IMMDeviceEnumerator* pEnumerator = nullptr;
@@ -147,12 +157,61 @@ void Visualizer::captureLoop() {
             m_captureClient->ReleaseBuffer(numFramesAvailable);
             m_captureClient->GetNextPacketSize(&packetLength);
         }
-        Sleep(m_intervalMs);
+        std::this_thread::sleep_for(std::chrono::milliseconds(m_intervalMs));
     }
 
     if (pEnumerator) pEnumerator->Release();
     if (pDevice) pDevice->Release();
     CoUninitialize();
+#else
+    // Linux Implementation - Optimized for Low Latency
+    static const pa_sample_spec ss = {
+        .format = PA_SAMPLE_FLOAT32LE,
+        .rate = 48000, // 匹配系统采样率，减少重采样延迟
+        .channels = 2
+    };
+
+    // 核心优化：显式请求低延迟缓冲区
+    pa_buffer_attr attr;
+    attr.maxlength = (uint32_t)-1;
+    attr.tlength = (uint32_t)-1;
+    attr.prebuf = (uint32_t)-1;
+    attr.minreq = (uint32_t)-1;
+    attr.fragsize = 512 * 2 * sizeof(float); // 强制小碎片读取
+
+    int error;
+    m_pulseClient = pa_simple_new(NULL, "KrooveVisualizer", PA_STREAM_RECORD, 
+                                  NULL, "Visualizer Capture", &ss, NULL, &attr, &error);
+
+    if (!m_pulseClient) {
+        fprintf(stderr, "❌ [Visualizer] PulseAudio pa_simple_new() 失败: %s\n", pa_strerror(error));
+        return;
+    }
+
+    fprintf(stdout, "✅ [Visualizer] PulseAudio 已启动 (低延迟模式, 48kHz)\n");
+
+    float buffer[512 * 2]; 
+    std::vector<float> pcmCollector;
+
+    while (m_running) {
+        // pa_simple_read 是阻塞的，它会在这里等待音频硬件产生数据
+        if (pa_simple_read(m_pulseClient, buffer, sizeof(buffer), &error) < 0) {
+            fprintf(stderr, "pa_simple_read() failed: %s\n", pa_strerror(error));
+            break;
+        }
+
+        for (int i = 0; i < 512; i++) {
+            // 取左声道
+            pcmCollector.push_back(buffer[i * 2]);
+            if (pcmCollector.size() >= 512) {
+                processFFT(pcmCollector.data(), 512);
+                pcmCollector.clear();
+            }
+        }
+        
+        // 移除 Sleep！由 pa_simple_read 的阻塞机制自然控制采集节奏
+    }
+#endif
 }
 
 } // namespace visualizer
