@@ -11,7 +11,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@nodert-win11/windows.media.control": "^0.1.6",
+
     "better-sqlite3": "^12.9.0",
     "chokidar": "^5.0.0",
     "cmake-js": "^8.0.0",
