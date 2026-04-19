@@ -4,6 +4,8 @@
 #else
 #include <unistd.h>
 #include <cstdio>
+#include <string>
+#include <memory>
 #endif
 #include <math.h>
 #include <algorithm>
@@ -85,16 +87,76 @@ void Visualizer::processFFT(const float* input, int count) {
         }
     }
 
+    // 1. 计算所有 Bin 的幅度，并寻找当前帧的最大值
+    float frameMax = 0.0f;
+    std::vector<float> magnitudes(m_binCount);
+    
     for (int i = 0; i < m_binCount; i++) {
-        float mag = std::abs(data[i]) / 256.0f; 
+        // 计算复数模（幅度谱）
+        float mag = std::abs(data[i]) / 256.0f;
+        
+        // 应用简单的频率加权：给人耳感知较弱的高频一点补偿
+        // 这里的补偿非常轻微，不会改变 512 的基本结构
+        float freqWeight = 1.0f + ((float)i / m_binCount) * 2.0f;
+        mag *= freqWeight;
+
+        magnitudes[i] = mag;
+        if (mag > frameMax) frameMax = mag;
+    }
+
+    // 2. 自动增益控制 (AGC) - 核心准度来源
+    // 追踪长期的最大振幅，动态调整增益
+    m_smoothMax = m_smoothMax * 0.99f + std::max(frameMax, 0.01f) * 0.01f;
+    // 调低目标强度：从 0.6 降至 0.22，让前端多边形缩放更克制
+    float targetGain = 0.22f / m_smoothMax; 
+    m_dynamicGain = m_dynamicGain * 0.95f + targetGain * 0.05f;
+    
+    // 限制增益范围，防止无声时底噪过大
+    if (m_dynamicGain > 15.0f) m_dynamicGain = 15.0f;
+    if (m_dynamicGain < 0.3f) m_dynamicGain = 0.3f;
+
+    // 3. 应用增益、对数缩放和平滑处理
+    for (int i = 0; i < m_binCount; i++) {
+        float mag = magnitudes[i] * m_dynamicGain;
+        
+        // 调整对数缩放：减弱曲线斜率
+        if (mag > 0.0f) {
+            mag = log10f(1.0f + mag * 4.0f) * 0.8f; 
+        }
+
         float current = m_spectrumTarget[i];
         
-        // 恢复最基础的平滑，防止视觉闪烁
-        if (mag > current) m_spectrumTarget[i] = current * 0.7f + mag * 0.3f;
-        else m_spectrumTarget[i] = current * 0.95f + mag * 0.05f;
+        // 改进的平滑逻辑：上升极快（捕捉瞬态），下降平滑（物理美感）
+        if (mag > current) {
+            m_spectrumTarget[i] = current * 0.4f + mag * 0.6f; // 更快的反应
+        } else {
+            m_spectrumTarget[i] = current * 0.85f + mag * 0.15f; // 更有物理感的下落
+        }
 
         if (m_spectrumTarget[i] > 1.0f) m_spectrumTarget[i] = 1.0f;
+        if (m_spectrumTarget[i] < 0.0f) m_spectrumTarget[i] = 0.0f;
     }
+}
+
+// 辅助函数：获取 Linux 系统默认的监听设备名 (.monitor)
+static std::string getDefaultMonitorDevice() {
+    char buffer[128];
+    std::string result = "";
+    // 使用 popen 执行 pactl 命令
+    FILE* pipe = popen("pactl get-default-sink 2>/dev/null", "r");
+    if (!pipe) return "";
+    if (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+        result = buffer;
+        // 移除末尾的换行符
+        size_t last = result.find_last_not_of(" \n\r\t");
+        if (last != std::string::npos) {
+            result = result.substr(0, last + 1);
+        }
+    }
+    pclose(pipe);
+    
+    if (result.empty()) return "";
+    return result + ".monitor";
 }
 
 void Visualizer::captureLoop() {
@@ -140,14 +202,27 @@ void Visualizer::captureLoop() {
             if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT)) {
                 for (UINT32 i = 0; i < numFramesAvailable; i++) {
                     float sample = 0.0f;
-                    if (isFloat) {
-                        sample = ((float*)pData)[i * m_pwfx->nChannels];
-                    } else {
-                        short s = ((short*)pData)[i * m_pwfx->nChannels];
-                        sample = s / 32768.0f;
+                    // 优化：合并所有声道，捕获更准确的能量
+                    for (int ch = 0; ch < m_pwfx->nChannels; ch++) {
+                        if (isFloat) {
+                            sample += ((float*)pData)[i * m_pwfx->nChannels + ch];
+                        } else {
+                            short s = ((short*)pData)[i * m_pwfx->nChannels + ch];
+                            sample += s / 32768.0f;
+                        }
                     }
+                    sample /= m_pwfx->nChannels;
 
                     pcmCollector.push_back(sample);
+                    if (pcmCollector.size() >= 512) {
+                        processFFT(pcmCollector.data(), 512);
+                        pcmCollector.clear();
+                    }
+                }
+            } else {
+                // 如果是静默状态，推入 0 以保持平滑回落
+                for (UINT32 i = 0; i < numFramesAvailable; i++) {
+                    pcmCollector.push_back(0.0f);
                     if (pcmCollector.size() >= 512) {
                         processFFT(pcmCollector.data(), 512);
                         pcmCollector.clear();
@@ -179,16 +254,25 @@ void Visualizer::captureLoop() {
     attr.minreq = (uint32_t)-1;
     attr.fragsize = 512 * 2 * sizeof(float); // 强制小碎片读取
 
+    // 自动检测监听设备
+    std::string monitorName = getDefaultMonitorDevice();
+    const char* devicePtr = monitorName.empty() ? NULL : monitorName.c_str();
+
     int error;
     m_pulseClient = pa_simple_new(NULL, "KrooveVisualizer", PA_STREAM_RECORD, 
-                                  NULL, "Visualizer Capture", &ss, NULL, &attr, &error);
+                                  devicePtr, "Visualizer Capture", &ss, NULL, &attr, &error);
 
     if (!m_pulseClient) {
-        fprintf(stderr, "❌ [Visualizer] PulseAudio pa_simple_new() 失败: %s\n", pa_strerror(error));
+        fprintf(stderr, "❌ [Visualizer] PulseAudio pa_simple_new() 失败: %s (设备: %s)\n", 
+                pa_strerror(error), devicePtr ? devicePtr : "default");
         return;
     }
 
-    fprintf(stdout, "✅ [Visualizer] PulseAudio 已启动 (低延迟模式, 48kHz)\n");
+    if (devicePtr) {
+        fprintf(stdout, "✅ [Visualizer] PulseAudio 已启动 (自动捕获: %s)\n", devicePtr);
+    } else {
+        fprintf(stdout, "✅ [Visualizer] PulseAudio 已启动 (使用系统默认源)\n");
+    }
 
     float buffer[512 * 2]; 
     std::vector<float> pcmCollector;

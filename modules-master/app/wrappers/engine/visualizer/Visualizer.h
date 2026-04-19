@@ -38,6 +38,8 @@ private:
     float* m_spectrumTarget = nullptr;
     int m_binCount = 256;
     int m_intervalMs = 16; 
+    float m_dynamicGain = 1.0f;
+    float m_smoothMax = 0.1f;
 
     std::vector<float> m_hannWindow;
     
