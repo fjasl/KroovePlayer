@@ -50,10 +50,27 @@ module.exports = {
       values.push(data.cover_path);
     }
 
-    if (fields.length === 0) return;
     values.push(id);
     return db
       .prepare(`UPDATE tracks SET ${fields.join(", ")} WHERE id = ?`)
       .run(...values);
   },
+
+  // 清理不再属于任何监控目录的歌曲
+  pruneOrphanedTracks: (allowedFolders) => {
+    const tracks = db.prepare("SELECT id, path FROM tracks").all();
+    const toDelete = tracks.filter(track => {
+      // 如果路径不属于任何一个监控文件夹，且该文件在磁盘上可能已失效，则标记为删除
+      return !allowedFolders.some(folder => track.path.startsWith(folder));
+    });
+    
+    if (toDelete.length > 0) {
+      const deleteStmt = db.prepare("DELETE FROM tracks WHERE id = ?");
+      const transaction = db.transaction((ids) => {
+        for (const id of ids) deleteStmt.run(id);
+      });
+      transaction(toDelete.map(t => t.id));
+    }
+    return toDelete.length;
+  }
 };

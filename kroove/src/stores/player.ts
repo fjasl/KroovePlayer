@@ -64,6 +64,42 @@ export const usePlayerStore = defineStore('player', () => {
   // [New] UI 状态：侧边栏展开
   const isSidebarExpanded = ref(false);
 
+  // [New] 消息通知系统：支持多条消息垂直堆叠
+  const notifications = ref<any[]>([]);
+  const timers = new Map<string, any>(); // 管理计时器，防止重复更新时提前消失
+
+  const addNotification = (notif: { id: string, title: string, message: string, duration?: number, active?: boolean }) => {
+    const id = notif.id;
+    
+    // 清理旧计时器
+    if (timers.has(id)) {
+      clearTimeout(timers.get(id));
+      timers.delete(id);
+    }
+
+    // 更新或新增
+    const idx = notifications.value.findIndex(n => n.id === id);
+    const data = { ...notif };
+
+    if (idx !== -1) {
+      notifications.value[idx] = data;
+    } else {
+      notifications.value.push(data);
+    }
+
+    // 逻辑：如果 active 是 false，或者设置了明确的 duration，则启动销毁计时
+    // 如果任务结束 (active: false)，给 3 秒展示结果后自动消失
+    const finalDuration = notif.active === false ? 3000 : notif.duration;
+
+    if (finalDuration && finalDuration > 0) {
+      const timer = setTimeout(() => {
+        notifications.value = notifications.value.filter(n => n.id !== id);
+        timers.delete(id);
+      }, finalDuration);
+      timers.set(id, timer);
+    }
+  }
+
   const initConnection = () => {
     if (ws) return;
     ws = new WebSocket('ws://127.0.0.1:6344');
@@ -76,6 +112,17 @@ export const usePlayerStore = defineStore('player', () => {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+
+        // [Unified] 统一处理通知信号
+        if (data.type === 'notify') {
+          addNotification({
+            id: data.id,
+            title: data.title,
+            message: data.message,
+            duration: data.duration,
+            active: data.active
+          });
+        }
 
         if (data.type === 'playback_status') {
           // 如果用户正在拖拽进度条，不强制通过后端回推抢占光标
@@ -354,6 +401,8 @@ export const usePlayerStore = defineStore('player', () => {
     activeSidebarId,
     activeTab,
     isSidebarExpanded,
-    syncUiState
+    syncUiState,
+    notifications,
+    addNotification
   }
 })

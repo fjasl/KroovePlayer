@@ -16,6 +16,7 @@ class LibraryManager {
         this.scanCount = 0; // 当前“突发”扫描的文件总数
         this.isScanning = false;
         this.onScanStatus = null; // 用于通知上层的回调
+        this.onNotify = null;     // [New] 增加通用通知回调
         this.scanType = 'add';   // 'add' | 'remove' | 'update'
         this.lastFile = '';      // 当前正在处理的文件名
     }

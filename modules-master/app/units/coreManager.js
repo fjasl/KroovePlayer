@@ -92,6 +92,20 @@ class CoreManager {
     this.mediaControl = new MediaControlManager(this);
   }
 
+  /**
+   * [Unified] 统一通知推送入口
+   */
+  notify(id, title, message, active = true, duration = 0) {
+    this.broadcast({
+      type: "notify",
+      id,
+      title,
+      message,
+      active,
+      duration
+    });
+  }
+
   // [New] 独立的频谱广播任务
   startVisualizerBroadcast(hz = 60) {
     if (this.vizTimer) clearInterval(this.vizTimer);
@@ -216,15 +230,22 @@ class CoreManager {
       // 2. 正常运行：执行一次增量扫描
       await libraryManager.scanAll();
 
-      // [New] 绑定扫描状态回调：向前端推送正在添加歌曲的通知
+      // [New] 绑定扫描状态回调：只在扫描结束时通知结算结果
       libraryManager.onScanStatus = (active, count, scanType, lastFile) => {
-        this.broadcast({
-          type: "library_scan_status",
-          active: active,
-          count: count,
-          scanType: scanType,
-          lastFile: lastFile
-        });
+        // 如果扫描还在进行中，直接返回，不再骚扰前端显示具体文件
+        if (active) return;
+
+        // 只有在结束时 (active=false) 才发送结算通知
+        if (scanType === 'add') {
+            this.notify("library_op", '曲库更新成功', `已成功添加 ${count} 首新歌曲`, false);
+        } else if (scanType === 'remove') {
+            this.notify("library_op", '清理完成', `已从库中移除失效资源`, false);
+        }
+      };
+
+      // [New] 绑定通用通知回调 (如歌词自动关联等)
+      libraryManager.onNotify = (id, title, message, active) => {
+        this.notify(id, title, message, active);
       };
 
       // 3. 启动实时监听：当文件变动时自动执行 syncCurrentState
@@ -274,10 +295,22 @@ class CoreManager {
     const absolutePath = path.resolve(targetPath);
     configManager.removeLibraryFolder(absolutePath);
     this.libraryFolders = configManager.get("libraryFolders") || [];
-    console.log(`➖ 目录移除成功: ${absolutePath}`);
+    
+    // [Unified] 移除目录开始
+    this.notify("folder_op", "正在移除目录", "正在从库中清理失效歌曲...");
+
+    // 清理数据库：移除不再属于任何监听目录的歌曲
+    const pruneCount = dbManager.pruneOrphanedTracks(this.libraryFolders);
+    console.log(`➖ 目录移除成功: ${absolutePath} (从数据库清理了 ${pruneCount} 首不再监听的歌曲)`);
 
     // 刷新监控
     libraryManager.initWatcher(() => this.syncCurrentState());
+
+    playlist.loadAll(); // 库有变更，重载内存队列
+    this.syncCurrentState(); // 发起一次全量同步，通知前端列表已变动
+
+    // [Unified] 移除目录成功 (active: false 会自动触发 3s 倒计时销毁)
+    this.notify("folder_op", "目录移除成功", `已成功清理 ${pruneCount} 首失效歌曲`, false);
 
     this.broadcast({ type: "library_folders", folders: this.libraryFolders });
     this.broadcast({ type: "queue_ids", ids: playlist.getQueueIds(), isBroadcast: true });
@@ -452,6 +485,9 @@ class CoreManager {
   async updateTrackManual(id, data) {
     dbManager.updateTrackManual(id, data);
     console.log(`✅ 已手动匹配曲目 [ID: ${id}] 的资源`);
+    
+    // [Unified] 通知前端资源已变动
+    this.notify("manual_update", "资源变动", "曲目资源已手动更新", false);
 
     // 只要更新了曲目信息，就发起一次全局同步，确保列表和播放状态刷新
     this.syncCurrentState();
