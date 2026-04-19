@@ -106,7 +106,7 @@ void Visualizer::processFFT(const float* input, int count) {
 
     // 2. 自动增益控制 (AGC) - 核心准度来源
     // 追踪长期的最大振幅，动态调整增益
-    m_smoothMax = m_smoothMax * 0.99f + std::max(frameMax, 0.01f) * 0.01f;
+    m_smoothMax = m_smoothMax * 0.99f + (std::max)(frameMax, 0.01f) * 0.01f;
     // 调低目标强度：从 0.6 降至 0.22，让前端多边形缩放更克制
     float targetGain = 0.22f / m_smoothMax; 
     m_dynamicGain = m_dynamicGain * 0.95f + targetGain * 0.05f;
@@ -138,6 +138,7 @@ void Visualizer::processFFT(const float* input, int count) {
     }
 }
 
+#ifndef _WIN32
 // 辅助函数：获取 Linux 系统默认的监听设备名 (.monitor)
 static std::string getDefaultMonitorDevice() {
     char buffer[128];
@@ -158,6 +159,7 @@ static std::string getDefaultMonitorDevice() {
     if (result.empty()) return "";
     return result + ".monitor";
 }
+#endif
 
 void Visualizer::captureLoop() {
 #ifdef _WIN32
