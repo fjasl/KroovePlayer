@@ -5,6 +5,7 @@ const path = require('path');
 const configPath = path.resolve(__dirname, '../../kroove_config.json');
 
 const defaultConfig = {
+    serverPort: 6344,            // 后端服务端口
     libraryFolders: [], // 记录所有监听扫描的本地音乐文件夹
     themeMode: 'system',
     autoRetrieve: true,
@@ -23,6 +24,7 @@ const defaultConfig = {
 class ConfigManager {
     constructor() {
         this.config = { ...defaultConfig };
+        this._saveTimer = null;
         this.load();
     }
 
@@ -40,13 +42,31 @@ class ConfigManager {
         }
     }
 
+    /**
+     * 立即原子写入：先写临时文件再 rename，防止写入中途崩溃导致文件损坏。
+     * 同时会取消任何挂起的防抖写入。
+     */
     save() {
+        if (this._saveTimer) {
+            clearTimeout(this._saveTimer);
+            this._saveTimer = null;
+        }
         try {
-            // 使用 null, 4 保持 JSON 格式漂亮可读
-            fs.writeFileSync(configPath, JSON.stringify(this.config, null, 4), 'utf8');
+            const tmpPath = configPath + '.tmp';
+            fs.writeFileSync(tmpPath, JSON.stringify(this.config, null, 4), 'utf8');
+            fs.renameSync(tmpPath, configPath);
         } catch (e) {
             console.error("❌ 写入配置文件出错:", e);
         }
+    }
+
+    /**
+     * 防抖写入：500ms 内的多次调用合并为一次磁盘写入。
+     * 适用于高频更新场景（如音量拖拽、播放进度持久化）。
+     */
+    _scheduleSave() {
+        if (this._saveTimer) clearTimeout(this._saveTimer);
+        this._saveTimer = setTimeout(() => this.save(), 500);
     }
 
     get(key) {
@@ -55,7 +75,7 @@ class ConfigManager {
 
     set(key, value) {
         this.config[key] = value;
-        this.save();
+        this._scheduleSave();
     }
 
     // --- 专门为监控目录提供的便捷封装 ---

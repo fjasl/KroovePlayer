@@ -1,9 +1,11 @@
 const CoreManager = require('./units/coreManager.js');
 const NetworkManager = require('./units/networkManager.js');
+const configManager = require('./units/configManager.js');
 
 // 1. 系统核心配置与初始化
 const core = new CoreManager();
 const network = new NetworkManager(core);
+const SERVER_PORT = configManager.get('serverPort') || 6344;
 
 // 2. 启动整体业务
 async function startApp() {
@@ -12,7 +14,7 @@ async function startApp() {
         await core.bootstrap();
         
         // 第二步：开启集中的网络总线 (所有路由节点集中于此)
-        await network.start(6344);
+        await network.start(SERVER_PORT);
         
         console.log("✨ Kroove 核心集群已就绪，网络节点已全面收拢。");
     } catch (e) {
@@ -21,3 +23,4 @@ async function startApp() {
 }
 
 startApp();
+

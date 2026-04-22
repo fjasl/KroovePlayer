@@ -67,6 +67,9 @@ bool Engine::engine_load(const std::string &songUrl,
   // 3. 启动音频加载
   m_player.load(songUrl);
 
+  // 4. 启动频谱分析器（仅首次调用生效，后续由内部守卫跳过）
+  m_visualizer.start(shared_state_.spectrum, 256);
+
   return true;
 }
 
@@ -81,9 +84,6 @@ void Engine::handle_internal_update(const player::PlayerProperties &props) {
     queryResult = lyricer::LyricQuery::query(lrc_core_.doc, props.timePos);
 
     // 1. 同步到共享内存结构体 (高频，静默)
-    // [New] 确保渲染器已启动并绑定共享内存中的频谱槽位
-    m_visualizer.start(shared_state_.spectrum, 256);
-
     shared_state_.playback_state = static_cast<int>(props.state);
     shared_state_.time_pos = props.timePos;
     shared_state_.duration = props.duration;
@@ -148,9 +148,6 @@ void Engine::setVisualizerFrequency(int hz) {
 
 void Engine::syncStatus(SharedEngineState *sharedState) {
   if (!sharedState) return;
-
-  // [New] 启动频谱分析器：绑定并高频刷新共享内存
-  m_visualizer.start(sharedState->spectrum, 256);
 
   // 1. 同步播放状态
   auto props = m_player.getProperties();

@@ -55,7 +55,7 @@ void Visualizer::stop() {
 void Visualizer::processFFT(const float* input, int count) {
     if (!m_spectrumTarget || count < 512) return;
 
-    static std::complex<float> data[512];
+    std::complex<float> data[512];
     for (int i = 0; i < 512; i++) {
         float val = input[i];
         if (!std::isnan(val) && !std::isinf(val)) {

@@ -7,6 +7,10 @@ const playlist = require("./playlistManager");
 const configManager = require("./configManager"); // 引入 JSON 配置
 const MediaControlManager = require("./mediaControlManager");
 
+// 统一服务配置常量
+const SERVER_PORT = configManager.get('serverPort') || 6344;
+const BASE_URL = `http://127.0.0.1:${SERVER_PORT}`;
+
 // ==========================================
 // --- 核心播放状态枚举 (与 C++ 保持一致) ---
 // ==========================================
@@ -39,7 +43,6 @@ class CoreManager {
       256
     );
 
-    this.vizTimer = null;
     this.vizTimer = null;
     this.vizFrequency = 60;
 
@@ -360,7 +363,7 @@ class CoreManager {
         title: t.title,
         artist: t.artist,
         duration: t.duration,
-        coverUrl: `http://127.0.0.1:6344/cover-by-id/${t.id}`,
+        coverUrl: `${BASE_URL}/cover-by-id/${t.id}`,
       };
     });
 
@@ -372,7 +375,7 @@ class CoreManager {
         artist: track.artist,
         album: track.album,
         lyrics: layout,
-        coverUrl: `http://127.0.0.1:6344/cover-by-id/${id}`,
+        coverUrl: `${BASE_URL}/cover-by-id/${id}`,
       },
       window: windowMetadata,
     });
@@ -456,11 +459,11 @@ class CoreManager {
         current: {
           ...this.playback.item,
           lyrics: this.playback.lyrics,
-          coverUrl: `http://127.0.0.1:6344/cover-by-id/${this.playback.item.id}`,
+          coverUrl: `${BASE_URL}/cover-by-id/${this.playback.item.id}`,
         },
         window: windowIds.map(wid => {
            const t = dbManager.getTrackById(wid);
-           return { id: t.id, title: t.title, artist: t.artist, duration: t.duration, coverUrl: `http://127.0.0.1:6344/cover-by-id/${t.id}` };
+           return { id: t.id, title: t.title, artist: t.artist, duration: t.duration, coverUrl: `${BASE_URL}/cover-by-id/${t.id}` };
         })
       });
       // 注入当前进度与状态机状态

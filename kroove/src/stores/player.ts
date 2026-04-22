@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, watch } from 'vue'
 
+// 统一后端服务地址常量
+const API_PORT = 6344
+const API_BASE = `http://127.0.0.1:${API_PORT}`
+const WS_URL = `ws://127.0.0.1:${API_PORT}`
+
 export const usePlayerStore = defineStore('player', () => {
   const isPlaying = ref(false)
   const isShuffle = ref(false)
@@ -70,7 +75,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   const addNotification = (notif: { id: string, title: string, message: string, duration?: number, active?: boolean }) => {
     const id = notif.id;
-    
+
     // 清理旧计时器
     if (timers.has(id)) {
       clearTimeout(timers.get(id));
@@ -102,7 +107,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   const initConnection = () => {
     if (ws) return;
-    ws = new WebSocket('ws://127.0.0.1:6344');
+    ws = new WebSocket(WS_URL);
 
     ws.onopen = () => {
       console.log('✅ WebSocket Connected. Requesting Sync...');
@@ -131,7 +136,7 @@ export const usePlayerStore = defineStore('player', () => {
           }
           // 在播放最初如果没有长度可以依靠心跳更新
           if (data.duration > 0) {
-              duration.value = data.duration;
+            duration.value = data.duration;
           }
           // 只有状态 3 才是明确在播放中，状态 4 是已暂停
           isPlaying.value = (data.state === 3);
@@ -227,7 +232,7 @@ export const usePlayerStore = defineStore('player', () => {
           }
         }
 
-        // 4. 处理实时歌词行变动（包含行进度和诌d级数据）
+        // 4. 处理实时歌词行变动（包含行进度和词级数据）
         if (data.type === 'lyric_line_change') {
           currentLineIndex.value = data.line;
           if (data.lineProgress !== undefined) lineProgress.value = data.lineProgress;
@@ -252,9 +257,9 @@ export const usePlayerStore = defineStore('player', () => {
     };
 
     ws.onclose = () => {
-        console.warn('🔌 WebSocket 断开，正在尝试重连...');
-        ws = null;
-        setTimeout(() => initConnection(), 3000);
+      console.warn('🔌 WebSocket 断开，正在尝试重连...');
+      ws = null;
+      setTimeout(() => initConnection(), 3000);
     }
   }
 
@@ -330,7 +335,7 @@ export const usePlayerStore = defineStore('player', () => {
     if (missingIds.length === 0) return;
 
     try {
-      const response = await fetch('http://127.0.0.1:6344/api/track/batch', {
+      const response = await fetch(`${API_BASE}/api/track/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: missingIds })
