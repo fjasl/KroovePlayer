@@ -92,9 +92,10 @@ body { background: var(--bg-main); overflow: hidden; color: var(--text-primary);
 
 .app-shell {
   display: grid;
-  grid-template-rows: 1fr 80px; 
+  grid-template-rows: 1fr 80px;
   height: 100vh;
   width: 100vw;
+  position: relative;
   background: var(--bg-main);
   color: var(--text-primary);
 }
@@ -150,5 +151,24 @@ body { background: var(--bg-main); overflow: hidden; color: var(--text-primary);
   background-color: var(--text-primary);
   border: 1px solid transparent;
   border-radius: 0;
+}
+
+/* ========== 竖屏设备（Android 等）强制横屏渲染 ========== */
+@media (orientation: portrait) {
+  .app-shell {
+    /* 尺寸互换：宽取屏高，高取屏宽 */
+    /* dvh/dvw 动态视口单位排除浏览器地址栏，fallback 给旧浏览器 */
+    width: 100vh;
+    width: 100dvh;
+    height: 100vw;
+    height: 100dvw;
+    /* 居中 + 旋转 90°，视觉上占满竖屏 */
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(90deg);
+    transform-origin: center center;
+    overflow: hidden;
+  }
 }
 </style>

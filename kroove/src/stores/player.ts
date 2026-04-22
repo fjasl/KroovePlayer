@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, watch } from 'vue'
 
-// 统一后端服务地址常量
+// 统一后端服务地址常量（自动适配本机/局域网访问）
 const API_PORT = 6344
-const API_BASE = `http://127.0.0.1:${API_PORT}`
-const WS_URL = `ws://127.0.0.1:${API_PORT}`
+const API_HOST = window.location.hostname || '127.0.0.1'
+const API_BASE = `http://${API_HOST}:${API_PORT}`
+const WS_URL = `ws://${API_HOST}:${API_PORT}`
 
 export const usePlayerStore = defineStore('player', () => {
   const isPlaying = ref(false)

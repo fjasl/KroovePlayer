@@ -10,6 +10,9 @@ export default defineConfig({
     vue(),
     //vueDevTools(),
   ],
+  server: {
+    host: '0.0.0.0', // 允许局域网设备通过 IP 访问
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
