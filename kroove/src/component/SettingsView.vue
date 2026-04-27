@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import GrooveSwitch from './GrooveSwitch.vue'
 import GrooveRadio from './GrooveRadio.vue'
 import GrooveLink from './GrooveLink.vue'
+import GrooveSelect from './GrooveSelect.vue'
 import LocationDialog from './LocationDialog.vue'
 import { usePlayerStore } from '../stores/player'
 
@@ -11,6 +12,21 @@ const playerStore = usePlayerStore()
 const autoRetrieve = ref(true)
 const artistLockScreen = ref(false)
 const artistWallpaper = ref(false)
+const selectedTheme = ref('jazz')
+
+const themeOptions = [
+  { label: '爵士', value: 'jazz' },
+  { label: '电子', value: 'electronic' },
+  { label: '民谣', value: 'folk' },
+  { label: '嘻哈', value: 'hiphop' },
+  { label: '金属', value: 'metal' },
+  { label: '古典', value: 'classical' },
+  { label: '布鲁斯', value: 'blues' },
+  { label: '朋克', value: 'punk' },
+  { label: '灵魂', value: 'soul' },
+  { label: '放克', value: 'funk' }
+]
+
 
 const showLocationDialog = ref(false)
 
@@ -39,6 +55,7 @@ function openLocationDialog() {
           <GrooveLink>均衡器</GrooveLink>
         </section>
 
+
         <section class="settings-section">
           <h2>媒体信息</h2>
           <p class="description">自动检索并更新缺失的专辑封面和元数据</p>
@@ -61,6 +78,12 @@ function openLocationDialog() {
             <p class="description">全屏模式下渲染具有律动感的音频频谱</p>
             <GrooveSwitch v-model="playerStore.enableSpectrum" />
           </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>主题风格</h2>
+          <p class="description">选择应用的主题风格</p>
+          <GrooveSelect v-model="selectedTheme" :options="themeOptions" placeholder="选择主题" />
         </section>
 
         <section class="settings-section">
