@@ -135,8 +135,17 @@ function onAfterLeave(el: Element) {
 </template>
 
 <style scoped>
-/* ===== 外层容器：仅占位，不参与边框 ===== */
+/* ===== 外层容器 + 主题变量（深色默认） ===== */
 .groove-select-wrapper {
+  --select-bg: #111111;
+  --select-border: #777777;
+  --select-border-hover: #aaaaaa;
+  --select-text: #ffffff;
+  --select-highlight: #0078d4ff;
+  --select-shadow: rgba(0, 0, 0, 0.8);
+  --select-scrollbar: #555555;
+  --select-scrollbar-hover: #777777;
+
   position: relative;
   display: inline-block;
   width: 100%;
@@ -144,15 +153,16 @@ function onAfterLeave(el: Element) {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
+
 /* ===== 关闭时的选择框 ===== */
 .groove-select-trigger {
   width: 100%;
   height: 34px;
   padding: 0 12px;
-  border: 2px solid #777777;
+  border: 2px solid var(--select-border);
   border-radius: 0;
-  background: #111111;
-  color: #ffffff;
+  background: var(--select-bg);
+  color: var(--select-text);
   font-size: 14px;
   cursor: pointer;
   display: flex;
@@ -165,7 +175,7 @@ function onAfterLeave(el: Element) {
 }
 
 .groove-select-trigger:hover {
-  border-color: #aaaaaa;
+  border-color: var(--select-border-hover);
 }
 
 /* ===== 当前值文本 ===== */
@@ -186,7 +196,7 @@ function onAfterLeave(el: Element) {
   justify-content: center;
   width: 16px;
   height: 16px;
-  color: #ffffff;
+  color: var(--select-text);
   flex-shrink: 0;
 }
 
@@ -202,21 +212,21 @@ function onAfterLeave(el: Element) {
   top: 0;
   left: 0;
   right: 0;
-  background: #111111;
-  border: 2px solid #777777;
+  background: var(--select-bg);
+  border: 2px solid var(--select-border);
   padding: 4px 0;
   max-height: 280px;
   overflow-y: auto;
   overflow-x: hidden;
   z-index: 1000;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 6px 24px var(--select-shadow);
   box-sizing: border-box;
 }
 
 /* ===== 单个选项 ===== */
 .select-option {
   padding: 8px 12px;
-  color: #ffffff;
+  color: var(--select-text);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -226,11 +236,11 @@ function onAfterLeave(el: Element) {
 }
 
 .select-option:hover {
-  background: #003060;
+  background: var(--select-highlight);
 }
 
 .select-option.is-selected {
-  background: #003060;
+  background: var(--select-highlight);
 }
 
 .option-label {
@@ -247,10 +257,24 @@ function onAfterLeave(el: Element) {
 }
 
 .select-dropdown::-webkit-scrollbar-thumb {
-  background: #555555;
+  background: var(--select-scrollbar);
 }
 
 .select-dropdown::-webkit-scrollbar-thumb:hover {
-  background: #777777;
+  background: var(--select-scrollbar-hover);
+}
+</style>
+
+<!-- 浅色主题覆盖：必须用非 scoped 才能匹配祖先 .theme-light -->
+<style>
+.theme-light .groove-select-wrapper {
+  --select-bg: #ffffff;
+  --select-border: #999999;
+  --select-border-hover: #666666;
+  --select-text: #111111;
+  --select-highlight: #0078d4ff;
+  --select-shadow: rgba(0, 0, 0, 0.15);
+  --select-scrollbar: #bbbbbb;
+  --select-scrollbar-hover: #999999;
 }
 </style>
