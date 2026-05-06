@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import IconChevronDown from '../assets/icons/IconChevronDown.vue'
 
 interface SelectOption {
@@ -20,10 +20,10 @@ const emit = defineEmits<{
 const isOpen = ref(false)
 const wrapperRef = ref<HTMLElement | null>(null)
 
-const selectedLabel = () => {
+const selectedLabel = computed(() => {
   const option = props.options.find(opt => opt.value === props.modelValue)
   return option?.label || props.placeholder || '请选择'
-}
+})
 
 const handleSelect = (value: string | number) => {
   emit('update:modelValue', value)
@@ -63,8 +63,10 @@ function onEnter(el: Element, done: () => void) {
   htmlEl.style.transition = 'max-height 0.2s ease-out, opacity 0.15s ease'
   htmlEl.style.maxHeight = htmlEl.scrollHeight + 'px'
   htmlEl.style.opacity = '1'
-  const onEnd = () => { done() }
-  htmlEl.addEventListener('transitionend', onEnd, { once: true })
+  let finished = false
+  const finish = () => { if (finished) return; finished = true; clearTimeout(fallback); done() }
+  htmlEl.addEventListener('transitionend', finish, { once: true })
+  const fallback = setTimeout(finish, 250)
 }
 
 function onAfterEnter(el: Element) {
@@ -87,8 +89,10 @@ function onLeave(el: Element, done: () => void) {
   htmlEl.style.transition = 'max-height 0.18s ease-in, opacity 0.12s ease'
   htmlEl.style.maxHeight = '0'
   htmlEl.style.opacity = '0'
-  const onEnd = () => { done() }
-  htmlEl.addEventListener('transitionend', onEnd, { once: true })
+  let finished = false
+  const finish = () => { if (finished) return; finished = true; clearTimeout(fallback); done() }
+  htmlEl.addEventListener('transitionend', finish, { once: true })
+  const fallback = setTimeout(finish, 220)
 }
 
 function onAfterLeave(el: Element) {
@@ -103,7 +107,7 @@ function onAfterLeave(el: Element) {
   <div ref="wrapperRef" class="groove-select-wrapper">
     <!-- 关闭时：显示当前选中值和箭头 -->
     <button class="groove-select-trigger" @click="toggleDropdown">
-      <span class="select-value">{{ selectedLabel() }}</span>
+      <span class="select-value">{{ selectedLabel }}</span>
       <span class="select-arrow">
         <IconChevronDown :is-open="isOpen" />
       </span>
@@ -241,6 +245,7 @@ function onAfterLeave(el: Element) {
 
 .select-option.is-selected {
   background: var(--select-highlight);
+  font-weight: 600;
 }
 
 .option-label {

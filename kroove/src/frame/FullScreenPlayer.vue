@@ -207,8 +207,7 @@ watch(() => playerStore.isFullScreen, (isFull) => {
 .bg-image {
   width: 100%;
   height: 100%;
-  background-image: url('https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=1000');
-  /* 示例专辑图片 */
+  background-color: #000;
   background-size: cover;
   background-position: center;
   filter: blur(40px);
@@ -300,8 +299,7 @@ watch(() => playerStore.isFullScreen, (isFull) => {
 .cover {
   width: 80px;
   height: 80px;
-  background-image: url('https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=1000');
-  /* 示例专辑图片 */
+  background-color: #1a1a1a;
   background-size: cover;
   background-position: center;
   border-radius: 4px;

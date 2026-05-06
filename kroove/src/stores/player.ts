@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive, watch } from 'vue'
+import { ref, shallowRef, reactive, watch } from 'vue'
 
 // 统一后端服务地址常量（自动适配本机/局域网访问）
 const API_PORT = 6344
@@ -20,7 +20,7 @@ export const usePlayerStore = defineStore('player', () => {
   const isFullScreen = ref(false) // 全屏页面是否展开
   const enableLyricsAnimation = ref(true) // 是否启用 Canvas 随机歌词
   const enableSpectrum = ref(false)        // 是否启用频谱可视化渲染
-  const spectrumData = ref<number[]>(new Array(256).fill(0)) // 实时频谱数据
+  const spectrumData = shallowRef<number[]>(new Array(256).fill(0)) // 实时频谱数据
   const currentLineIndex = ref(-1)        // 当前播放的歌词行索引
   const lineProgress = ref(0)             // 当前行播放进度 0.0~1.0 (后端实时同步)
   const wordIndex = ref(-1)               // 当前字索引 (后端实时同步)

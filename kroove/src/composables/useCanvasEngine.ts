@@ -4,7 +4,7 @@
  * 从 FullScreenPlayer.vue 中分离，使主组件只关注 UI 布局。
  */
 
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, shallowRef, watch, onMounted, onUnmounted } from 'vue'
 import { usePlayerStore } from '../stores/player'
 import { LyricNode, PolygonSprite } from './lyricSprites'
 
@@ -16,8 +16,8 @@ export function useCanvasEngine() {
   let animationId: number | null = null
   let lastTimestamp = 0
 
-  const activeNodes = ref<LyricNode[]>([])
-  const activePolygons = ref<PolygonSprite[]>([])
+  const activeNodes = shallowRef<LyricNode[]>([])
+  const activePolygons = shallowRef<PolygonSprite[]>([])
 
   // --- 节奏跟踪状态 (自适应包络 + 差分检测) ---
   let smoothedEnergies = { low: 0, mid: 0, high: 0 }
