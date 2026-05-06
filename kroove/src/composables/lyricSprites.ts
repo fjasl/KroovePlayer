@@ -64,8 +64,8 @@ export class WordSprite {
       // 组放过程：带 Stagger 延迟的指数衰减
       const assemblyElapsed = Math.max(0, elapsed - this.assemblyDelay)
 
-      // 如果该词早就该入场了（差距超过 500ms），直接跳过动画进入锁定位置
-      if (assemblyElapsed > 500) {
+      // 如果该词早就该入场了（差距超过 1500ms），直接跳过动画进入锁定位置
+      if (assemblyElapsed > 1500) {
         this.currentX = this.targetRelX
         this.currentY = this.targetRelY
         this.opacity = 1
