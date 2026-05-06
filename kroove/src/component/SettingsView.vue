@@ -6,6 +6,8 @@ import GrooveLink from './GrooveLink.vue'
 import GrooveSelect from './GrooveSelect.vue'
 import LocationDialog from './LocationDialog.vue'
 import { usePlayerStore } from '../stores/player'
+import { API_BASE } from '../stores/player'
+import { onMounted } from 'vue'
 
 const playerStore = usePlayerStore()
 
@@ -13,6 +15,19 @@ const autoRetrieve = ref(true)
 const artistLockScreen = ref(false)
 const artistWallpaper = ref(false)
 const selectedTheme = ref('jazz')
+
+const lyricModeOptions = ref<{ label: string; value: string }[]>([])
+
+onMounted(async () => {
+  try {
+    const res = await fetch(`${API_BASE}/api/render/modes`)
+    if (res.ok) {
+      lyricModeOptions.value = await res.json()
+    }
+  } catch (err) {
+    console.error('Failed to fetch render modes:', err)
+  }
+})
 
 const themeOptions = [
   { label: '爵士', value: 'jazz' },
@@ -81,9 +96,9 @@ function openLocationDialog() {
         </section>
 
         <section class="settings-section">
-          <h2>主题风格</h2>
-          <p class="description">选择应用的主题风格</p>
-          <GrooveSelect v-model="selectedTheme" :options="themeOptions" placeholder="选择主题" />
+          <h2>歌词动画</h2>
+          <p class="description">全屏模式下的歌词渲染风格</p>
+          <GrooveSelect v-model="playerStore.lyricMode" :options="lyricModeOptions" placeholder="选择动画风格" />
         </section>
 
         <section class="settings-section">

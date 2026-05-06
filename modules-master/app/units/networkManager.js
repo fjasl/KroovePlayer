@@ -89,7 +89,7 @@ class NetworkManager {
         monitoredFolders: this.core.libraryFolders,
       });
     });
-    // 手动匹配资源接口
+      // 手动匹配资源接口
     this.app.post("/api/track/update-manual", async (req, res) => {
       const { id, lrcPath, coverPath } = req.body;
 
@@ -104,6 +104,29 @@ class NetworkManager {
       } catch (e) {
         res.status(500).json({ error: e.message });
       }
+    });
+
+    // 6. 获取可用的渲染模式列表
+    this.app.get("/api/render/modes", (req, res) => {
+      const modesDir = path.join(__dirname, "../../../kroove/src/composables/render");
+      const modes = [];
+      try {
+        if (fs.existsSync(modesDir)) {
+          const dirs = fs.readdirSync(modesDir, { withFileTypes: true });
+          for (const dir of dirs) {
+            if (dir.isDirectory()) {
+              const manifestPath = path.join(modesDir, dir.name, "manifest.json");
+              if (fs.existsSync(manifestPath)) {
+                const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+                modes.push({ label: manifest.name, value: manifest.id });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("读取渲染模式失败:", e);
+      }
+      res.json(modes);
     });
   }
 

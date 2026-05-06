@@ -4,7 +4,7 @@ import { ref, shallowRef, reactive, watch } from 'vue'
 // 统一后端服务地址常量（自动适配本机/局域网访问）
 const API_PORT = 6344
 const API_HOST = window.location.hostname || '127.0.0.1'
-const API_BASE = `http://${API_HOST}:${API_PORT}`
+export const API_BASE = `http://${API_HOST}:${API_PORT}`
 const WS_URL = `ws://${API_HOST}:${API_PORT}`
 
 export const usePlayerStore = defineStore('player', () => {
@@ -20,6 +20,7 @@ export const usePlayerStore = defineStore('player', () => {
   const isFullScreen = ref(false) // 全屏页面是否展开
   const enableLyricsAnimation = ref(true) // 是否启用 Canvas 随机歌词
   const enableSpectrum = ref(false)        // 是否启用频谱可视化渲染
+  const lyricMode = ref('default')         // 全屏歌词渲染模式
   const spectrumData = shallowRef<number[]>(new Array(256).fill(0)) // 实时频谱数据
   const currentLineIndex = ref(-1)        // 当前播放的歌词行索引
   const lineProgress = ref(0)             // 当前行播放进度 0.0~1.0 (后端实时同步)
@@ -217,6 +218,7 @@ export const usePlayerStore = defineStore('player', () => {
             if (data.uiState.themeMode) themeMode.value = data.uiState.themeMode
             if (data.uiState.enableLyricsAnimation !== undefined) enableLyricsAnimation.value = data.uiState.enableLyricsAnimation
             if (data.uiState.enableSpectrum !== undefined) enableSpectrum.value = data.uiState.enableSpectrum
+            if (data.uiState.lyricMode) lyricMode.value = data.uiState.lyricMode
 
             // [协同增强] 同步侧边栏展开状态
             if (data.uiState.isSidebarExpanded !== undefined) {
@@ -318,13 +320,14 @@ export const usePlayerStore = defineStore('player', () => {
         isSidebarExpanded: isSidebarExpanded.value,
         searchQuery: searchQuery.value,
         enableLyricsAnimation: enableLyricsAnimation.value,
-        enableSpectrum: enableSpectrum.value
+        enableSpectrum: enableSpectrum.value,
+        lyricMode: lyricMode.value
       }
     });
   }
 
   // 监听关键 UI 状态变动并自动报备
-  watch([activeSidebarId, activeTab, isFullScreen, themeMode, isSidebarExpanded, searchQuery, enableLyricsAnimation, enableSpectrum], () => {
+  watch([activeSidebarId, activeTab, isFullScreen, themeMode, isSidebarExpanded, searchQuery, enableLyricsAnimation, enableSpectrum, lyricMode], () => {
     if (isInternalUpdate) return; // 如果是来自后端的同步信号，不反馈发送，防止死循环
     syncUiState();
   }, { deep: true });
@@ -386,6 +389,7 @@ export const usePlayerStore = defineStore('player', () => {
     themeMode,
     enableSpectrum,
     spectrumData,
+    lyricMode,
 
     initConnection,
     fetchBatchMetadata,

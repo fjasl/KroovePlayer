@@ -1,0 +1,7 @@
+{
+  "id": "default",
+  "name": "默认组装效果",
+  "description": "默认的文字粒子离散组合效果，带有多种方向的飞入与溃散。",
+  "author": "Kroove",
+  "version": "1.0.0"
+}

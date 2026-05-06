@@ -7,6 +7,7 @@
 import { ref, shallowRef, watch, onMounted, onUnmounted } from 'vue'
 import { usePlayerStore } from '../stores/player'
 import { LyricNode, PolygonSprite } from './lyricSprites'
+import { getRenderMode } from './render/index'
 
 export function useCanvasEngine() {
   const playerStore = usePlayerStore()
@@ -73,13 +74,12 @@ export function useCanvasEngine() {
 
     ctx.clearRect(0, 0, lyricCanvasRef.value.width, lyricCanvasRef.value.height)
 
-    // --- [歌词渲染] ---
+    // --- 状态更新阶段 ---
     if (playerStore.enableLyricsAnimation) {
       for (let i = activeNodes.value.length - 1; i >= 0; i--) {
         const node = activeNodes.value[i]
         const wordIdx = node.isExiting ? -1 : playerStore.wordIndex
         node.update(dt, wordIdx)
-        node.draw(ctx)
         if (node.isExiting && node.opacity < 0.01) {
           activeNodes.value.splice(i, 1)
         }
@@ -122,15 +122,33 @@ export function useCanvasEngine() {
         }
       }
 
-      // 更新并绘制多边形
+      // 更新多边形
       for (let i = activePolygons.value.length - 1; i >= 0; i--) {
         const poly = activePolygons.value[i]
         poly.update(dt)
-        poly.draw(ctx)
         if (poly.opacity <= 0) {
           activePolygons.value.splice(i, 1)
         }
       }
+    }
+
+    // ==========================================
+    // --- 绘制阶段 (三层架构) ---
+    // ==========================================
+
+    // Layer 1 (底层): 频谱多边形
+    if (playerStore.enableSpectrum) {
+      activePolygons.value.forEach(poly => poly.draw(ctx!))
+    }
+
+    // Layer 2 (中层): 歌词文本
+    if (playerStore.enableLyricsAnimation) {
+      activeNodes.value.forEach(node => node.drawLyrics(ctx!))
+    }
+
+    // Layer 3 (顶层): 追踪光标
+    if (playerStore.enableLyricsAnimation) {
+      activeNodes.value.forEach(node => node.drawCursor(ctx!))
     }
 
     animationId = requestAnimationFrame(renderLoop)
@@ -171,6 +189,7 @@ export function useCanvasEngine() {
       lyricCanvasRef.value.width,
       lyricCanvasRef.value.height,
       ctx,
+      getRenderMode(playerStore.lyricMode),
       Math.max(0, initialElapsed)
     )
     activeNodes.value.push(newNode)
@@ -203,6 +222,7 @@ export function useCanvasEngine() {
             lyricCanvasRef.value.width,
             lyricCanvasRef.value.height,
             ctx,
+            getRenderMode(playerStore.lyricMode),
             Math.max(0, initialElapsed)
           )
           activeNodes.value = [node]
