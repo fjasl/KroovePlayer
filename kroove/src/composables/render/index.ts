@@ -1,9 +1,11 @@
 import type { LyricRenderMode } from './types'
 import { DefaultMode } from './default'
+import { TypewriterMode } from './typewriter'
 
 // 在这里注册前端所有的渲染插件
 const registeredModes: Record<string, LyricRenderMode> = {
-  [DefaultMode.id]: DefaultMode
+  [DefaultMode.id]: DefaultMode,
+  [TypewriterMode.id]: TypewriterMode
 }
 
 /**

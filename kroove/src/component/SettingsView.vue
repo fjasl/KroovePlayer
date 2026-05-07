@@ -16,13 +16,18 @@ const artistLockScreen = ref(false)
 const artistWallpaper = ref(false)
 const selectedTheme = ref('jazz')
 
-const lyricModeOptions = ref<{ label: string; value: string }[]>([])
+const lyricModeOptions = ref<{ label: string; value: string }[]>([
+  { label: '默认组装效果', value: 'default' }
+])
 
 onMounted(async () => {
   try {
     const res = await fetch(`${API_BASE}/api/render/modes`)
     if (res.ok) {
-      lyricModeOptions.value = await res.json()
+      const modes = await res.json()
+      if (Array.isArray(modes) && modes.length > 0) {
+        lyricModeOptions.value = modes
+      }
     }
   } catch (err) {
     console.error('Failed to fetch render modes:', err)

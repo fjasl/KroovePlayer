@@ -58,6 +58,11 @@ export class LyricNode {
   trackW: number = 0
   trackOpacity: number = 0
 
+  // 渲染模式使用的状态
+  elapsed: number = 0
+  activeWordIndex: number = -1
+  isFirstUpdate: boolean = true
+
   // 给渲染模式存储自定义数据的空间
   pluginData: any = {}
   mode: LyricRenderMode
