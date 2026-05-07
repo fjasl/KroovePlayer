@@ -1,0 +1,7 @@
+{
+  "id": "typewriter",
+  "name": "打字机效果",
+  "description": "逐字浮现的打字机效果，配合闪烁光标与底部进度条追踪。",
+  "author": "Kroove",
+  "version": "1.0.0"
+}
