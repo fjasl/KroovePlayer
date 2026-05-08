@@ -7,8 +7,7 @@
 import { ref, shallowRef, watch, onMounted, onUnmounted } from 'vue'
 import { usePlayerStore } from '../stores/player'
 import { LyricNode, PolygonSprite } from './lyricSprites'
-import { getRenderMode } from './render/index'
-import { setLyricContext } from './render/typewriter/candidates'
+import { getRenderMode, loadRenderMode, isModeLoaded } from './render/index'
 
 export function useCanvasEngine() {
   const playerStore = usePlayerStore()
@@ -178,8 +177,14 @@ export function useCanvasEngine() {
   }
 
   // --- 注入新歌词行 ---
-  const injectLyricLine = (lineData: any, lineProgress: number) => {
+  const injectLyricLine = async (lineData: any, lineProgress: number) => {
     if (!lyricCanvasRef.value || !ctx) return
+
+    // 确保渲染模式已加载（动态懒加载保护）
+    const modeId = playerStore.lyricMode
+    if (!isModeLoaded(modeId)) {
+      await loadRenderMode(modeId)
+    }
 
     // 将之前的活跃节点标记为"准备离场"
     activeNodes.value.forEach(node => node.isExiting = true)
@@ -190,33 +195,29 @@ export function useCanvasEngine() {
       lyricCanvasRef.value.width,
       lyricCanvasRef.value.height,
       ctx,
-      getRenderMode(playerStore.lyricMode),
+      getRenderMode(modeId),
       Math.max(0, initialElapsed)
     )
     activeNodes.value.push(newNode)
   }
 
   // --- 监听歌词行变更 ---
-  watch(() => playerStore.currentLineIndex, (newIdx) => {
+  watch(() => playerStore.currentLineIndex, async (newIdx) => {
     if (!playerStore.enableLyricsAnimation || newIdx === -1) return
 
     const lyricsLines = playerStore.currentTrack?.lyrics?.lines
     if (!lyricsLines || !lyricsLines[newIdx]) return
 
-    injectLyricLine(lyricsLines[newIdx], playerStore.lineProgress)
+    await injectLyricLine(lyricsLines[newIdx], playerStore.lineProgress)
   })
-
-  // --- [New] 歌词上下文注入：切歌时更新候选字源 ---
-  watch(() => playerStore.currentTrack?.lyrics, (lyrics) => {
-    if (lyrics?.lines) {
-      setLyricContext(lyrics.lines)
-    }
-  }, { immediate: true })
 
   // --- 全屏状态联动 ---
   watch(() => playerStore.isFullScreen, (isFull) => {
     if (isFull) {
-      setTimeout(() => {
+      setTimeout(async () => {
+        // 预加载当前渲染模式
+        await loadRenderMode(playerStore.lyricMode)
+
         initCanvas()
 
         // 校准当前歌词行

@@ -1,7 +1,6 @@
 import type { LyricRenderMode } from '../types'
 import type { LyricNode, WordSprite } from '../../lyricSprites'
 import { pinyin } from 'pinyin-pro'
-import { getDynamicCandidates } from './candidates'
 import manifest from './manifest.json'
 
 function isCJK(ch: string): boolean {
@@ -13,6 +12,34 @@ function getWordPinyin(text: string): string {
   const hasCJK = [...text].some(isCJK)
   if (!hasCJK) return ''
   return pinyin(text, { toneType: 'none', type: 'string' }).replace(/\s+/g, '')
+}
+
+// ========== 随机分块：把逐字歌词切成 1~3 字的拼写块 ==========
+function randomChunkWords(words: WordSprite[]): { startIdx: number; endIdx: number }[] {
+  const blocks: { startIdx: number; endIdx: number }[] = []
+  let i = 0
+  while (i < words.length) {
+    const remaining = words.length - i
+    const maxSize = Math.min(3, remaining)
+    // 完全随机：1~maxSize，最后一个如果只剩1个就直接单字
+    const size = remaining === 1 ? 1 : Math.floor(Math.random() * maxSize) + 1
+    blocks.push({ startIdx: i, endIdx: i + size })
+    i += size
+  }
+  return blocks
+}
+
+// ========== 拼音块数据结构 ==========
+interface PinyinBlock {
+  startIdx: number
+  endIdx: number
+  pinyin: string
+  pinyinLen: number
+  visiblePinyinCount: number
+  charPhase: number // 0=wait 1=pinyin 2=confirm 3=done
+  activatedTime: number
+  confirmStartTime: number
+  pinyinOpacity: number
 }
 
 export const TypewriterMode: LyricRenderMode = {
@@ -45,31 +72,43 @@ export const TypewriterMode: LyricRenderMode = {
         s.currentX = s.targetRelX
         s.currentY = 0
         s.opacity = 0
+        s.isActivated = false
         s.assemblyDelay = 0
         s.pluginData.measuredWidth = widths[i]
-
-        const py = getWordPinyin(s.text)
-        s.pluginData.pinyin = py
-        s.pluginData.pinyinLen = py.length
-        s.pluginData.hasPinyin = py.length > 0
-        s.pluginData.candidates = py.length > 0 ? getDynamicCandidates(s.text, py[0] || '', 5) : [s.text]
-        s.pluginData.charScale = 1.0
-        s.pluginData.pinyinOpacity = 0
-        s.pluginData.candidateOpacity = 0
-        s.pluginData.visiblePinyinCount = 0
-        s.pluginData.charPhase = 0 // 0=wait 1=pinyin 2=confirm 3=done
-
         cx += widths[i] + GAP
+      })
+
+      // ====== 随机分块，建立拼音块 ======
+      const chunks = randomChunkWords(node.words)
+      const blocks: PinyinBlock[] = chunks.map(chunk => {
+        const py = node.words.slice(chunk.startIdx, chunk.endIdx)
+          .map(w => getWordPinyin(w.text))
+          .join('')
+        return {
+          startIdx: chunk.startIdx,
+          endIdx: chunk.endIdx,
+          pinyin: py,
+          pinyinLen: py.length,
+          visiblePinyinCount: 0,
+          charPhase: 0,
+          activatedTime: 0,
+          confirmStartTime: 0,
+          pinyinOpacity: 0,
+        }
+      })
+
+      node.pluginData.blocks = blocks
+      // 记录每个字属于哪个 block
+      node.words.forEach((w, i) => {
+        const blockIdx = blocks.findIndex(b => i >= b.startIdx && i < b.endIdx)
+        w.pluginData.blockIndex = blockIdx
       })
     } else {
       const s = node.words[0]
       s.targetRelX = 0; s.targetRelY = 0; s.originX = 0; s.originY = 0
       s.currentX = 0; s.currentY = 0; s.isActivated = true
       s.pluginData.measuredWidth = tempCtx.measureText(s.text).width
-      s.pluginData.pinyin = ''; s.pluginData.pinyinLen = 0
-      s.pluginData.hasPinyin = false; s.pluginData.candidates = [s.text]
-      s.pluginData.charScale = 1.0; s.pluginData.pinyinOpacity = 0
-      s.pluginData.candidateOpacity = 0; s.pluginData.charPhase = 3
+      s.pluginData.blockIndex = -1
     }
 
     node.pluginData.caretPhase = 0
@@ -91,81 +130,118 @@ export const TypewriterMode: LyricRenderMode = {
     node.pluginData.caretPhase = (node.pluginData.caretPhase || 0) + safeDt * 0.08
     if (node.pluginData.caretPhase > Math.PI * 2) node.pluginData.caretPhase -= Math.PI * 2
 
+    const blocks: PinyinBlock[] = node.pluginData.blocks || []
     const PY_RATIO = 0.6
 
-    node.words.forEach((w, i) => {
-      if (!node.isExiting) {
-        if (!w.isActivated && externalWordIndex >= 0 && i <= externalWordIndex) {
-          w.isActivated = true
-          w.activatedTime = performance.now()
-          w.pluginData.charPhase = w.pluginData.hasPinyin ? 1 : 2
+    // ====== 1. 更新每个 Block 的状态机 ======
+    blocks.forEach(block => {
+      // Block 激活条件：当前唱到了块内的任意字
+      if (block.charPhase === 0 && externalWordIndex >= 0 && externalWordIndex >= block.startIdx) {
+        block.charPhase = block.pinyinLen > 0 ? 1 : 2
+        block.activatedTime = performance.now()
+      }
+
+      if (block.charPhase === 0) return
+
+      const elapsed = performance.now() - block.activatedTime
+      // 块的总持续时间 = 块内字数 × 单字平均时长（向后兼容）
+      const wordCount = block.endIdx - block.startIdx
+      const totalDur = Math.max(
+        node.words.slice(block.startIdx, block.endIdx).reduce((s, w) => s + Math.max(w.duration, 300), 0),
+        wordCount * 300
+      )
+      const pyDur = totalDur * PY_RATIO
+      const confirmDur = totalDur * (1 - PY_RATIO)
+
+      if (block.charPhase === 1) {
+        // --- 拼音输入阶段（整个块一起） ---
+        const prog = Math.min(1, elapsed / pyDur)
+        block.visiblePinyinCount = Math.ceil(prog * block.pinyinLen)
+        block.pinyinOpacity = Math.min(1, prog * 2.5)
+
+        if (elapsed >= pyDur) {
+          block.charPhase = 2
+          block.confirmStartTime = performance.now()
         }
-        if (!w.isActivated) return
+      } else if (block.charPhase === 2) {
+        // --- 确认阶段（整个块一起淡入） ---
+        const cElapsed = performance.now() - block.confirmStartTime
+        const t = Math.min(1, cElapsed / Math.max(confirmDur, 150))
 
-        const elapsed = performance.now() - w.activatedTime
-        const totalDur = Math.max(w.duration, 300)
-        const pyDur = totalDur * PY_RATIO
-        const confirmDur = totalDur * (1 - PY_RATIO)
+        block.pinyinOpacity = Math.max(0, 1 - (1 - Math.pow(1 - t, 3)) * 3)
+        block.visiblePinyinCount = block.pinyinLen
 
-        if (w.pluginData.hasPinyin && w.pluginData.charPhase === 1) {
-          // --- 拼音输入阶段 ---
-          const prog = Math.min(1, elapsed / pyDur)
-          const newVisibleCount = Math.ceil(prog * w.pluginData.pinyinLen)
-
-          if (w.pluginData.visiblePinyinCount !== newVisibleCount) {
-            w.pluginData.visiblePinyinCount = newVisibleCount
-            const prefix = (w.pluginData.pinyin as string).slice(0, newVisibleCount)
-            w.pluginData.candidates = getDynamicCandidates(w.text, prefix, 5)
+        if (t >= 1) {
+          block.charPhase = 3
+          block.pinyinOpacity = 0
+          // 块内所有字标记为已激活
+          for (let i = block.startIdx; i < block.endIdx; i++) {
+            node.words[i].isActivated = true
           }
-
-          w.pluginData.pinyinOpacity = Math.min(1, prog * 2.5)
-          w.pluginData.candidateOpacity = Math.min(1, prog * 2)
-          w.opacity = 0 // 字完全不显示，由拼音替代
-          w.pluginData.charScale = 1.2
-
-          if (elapsed >= pyDur) {
-            w.pluginData.charPhase = 2
-            w.pluginData.confirmStartTime = performance.now()
-          }
-        } else if (w.pluginData.charPhase === 2) {
-          // --- 选字确认阶段 ---
-          const cElapsed = w.pluginData.hasPinyin
-            ? performance.now() - (w.pluginData.confirmStartTime || performance.now())
-            : elapsed
-          const t = Math.min(1, cElapsed / Math.max(confirmDur, 150))
-          const ease = 1 - Math.pow(1 - t, 3)
-
-          w.pluginData.pinyinOpacity = Math.max(0, 1 - ease * 3)
-          w.pluginData.candidateOpacity = Math.max(0, 1 - ease * 2.5)
-          w.pluginData.visiblePinyinCount = w.pluginData.pinyinLen
-          w.pluginData.charScale = 1.2 - 0.2 * ease
-          w.opacity = ease
-
-          // 微弹
-          if (t > 0.5 && t < 1) {
-            w.pluginData.charScale -= Math.sin((t - 0.5) * Math.PI / 0.5) * 0.03
-          }
-
-          if (t >= 1) {
-            w.pluginData.charPhase = 3
-            w.opacity = 1; w.pluginData.charScale = 1.0
-            w.pluginData.pinyinOpacity = 0; w.pluginData.candidateOpacity = 0
-          }
-        } else if (w.pluginData.charPhase === 3) {
-          w.opacity = 1; w.pluginData.charScale = 1.0
-          w.pluginData.pinyinOpacity = 0; w.pluginData.candidateOpacity = 0
         }
-
-        w.currentX = w.targetRelX; w.currentY = w.targetRelY
-      } else {
-        w.opacity *= (0.93 - i * 0.003)
-        w.currentY -= 1.8 * safeDt
-        w.currentX += (Math.random() - 0.5) * 0.8 * safeDt
-        w.pluginData.pinyinOpacity = 0; w.pluginData.candidateOpacity = 0
       }
     })
 
-    // 光标追踪
+    // ====== 2. 根据所属 Block 更新每个字的状态 ======
+    node.words.forEach((w, i) => {
+      if (node.isExiting) {
+        w.opacity *= (0.93 - i * 0.003)
+        w.currentY -= 1.8 * safeDt
+        w.currentX += (Math.random() - 0.5) * 0.8 * safeDt
+        w.pluginData.pinyinOpacity = 0
+        w.pluginData.charScale = 1.0
+        return
+      }
+
+      const bIdx = w.pluginData.blockIndex
+      if (bIdx === undefined || bIdx === -1) {
+        // 无 block 的字（理论上不会发生）
+        w.currentX = w.targetRelX; w.currentY = w.targetRelY
+        return
+      }
+
+      const block = blocks[bIdx]
+      if (block.charPhase === 0) {
+        // 块未开始：字隐藏
+        w.opacity = 0
+        w.pluginData.pinyinOpacity = 0
+        w.pluginData.charScale = 1.0
+      } else if (block.charPhase === 1) {
+        // 拼音阶段：字隐藏，显示拼音
+        w.opacity = 0
+        w.pluginData.pinyinOpacity = block.pinyinOpacity
+        w.pluginData.charScale = 1.2
+      } else if (block.charPhase === 2) {
+        // 确认阶段：字淡入
+        const cElapsed = performance.now() - block.confirmStartTime
+        const totalDur = Math.max(
+          node.words.slice(block.startIdx, block.endIdx).reduce((s, w2) => s + Math.max(w2.duration, 300), 0),
+          (block.endIdx - block.startIdx) * 300
+        )
+        const confirmDur = totalDur * (1 - PY_RATIO)
+        const t = Math.min(1, cElapsed / Math.max(confirmDur, 150))
+        const ease = 1 - Math.pow(1 - t, 3)
+
+        w.pluginData.pinyinOpacity = block.pinyinOpacity
+        w.pluginData.charScale = 1.2 - 0.2 * ease
+        w.opacity = ease
+
+        // 微弹
+        if (t > 0.5 && t < 1) {
+          w.pluginData.charScale -= Math.sin((t - 0.5) * Math.PI / 0.5) * 0.03
+        }
+      } else if (block.charPhase === 3) {
+        // 完成：字稳定显示
+        w.opacity = 1
+        w.pluginData.charScale = 1.0
+        w.pluginData.pinyinOpacity = 0
+      }
+
+      w.currentX = w.targetRelX
+      w.currentY = w.targetRelY
+    })
+
+    // ====== 光标追踪 ======
     if (!node.isExiting && externalWordIndex >= 0 && externalWordIndex < node.words.length) {
       const aw = node.words[externalWordIndex]
       const halfW = (aw.pluginData.measuredWidth || 20) / 2
@@ -191,157 +267,99 @@ export const TypewriterMode: LyricRenderMode = {
     ctx.translate(node.x, node.y)
     ctx.globalAlpha = Math.max(0, node.opacity)
 
-    node.words.forEach((w, i) => {
-      const phase = w.pluginData.charPhase || 0
-      const pyOp = w.pluginData.pinyinOpacity || 0
-      const candOp = w.pluginData.candidateOpacity || 0
+    const blocks: PinyinBlock[] = node.pluginData.blocks || []
 
-      if (w.opacity < 0.005 && pyOp < 0.005) return
+    // ====== 按 Block 绘制拼音（整块拼音显示在块的上方居中） ======
+    blocks.forEach(block => {
+      if (block.charPhase === 0) return
+      const pyOp = block.pinyinOpacity
+      if (pyOp < 0.01) return
+
+      // 计算块的中心位置和总宽度
+      const firstW = node.words[block.startIdx]
+      const lastW = node.words[block.endIdx - 1]
+      const blockLeft = firstW.targetRelX - (firstW.pluginData.measuredWidth || 20) / 2
+      const blockRight = lastW.targetRelX + (lastW.pluginData.measuredWidth || 20) / 2
+      const blockCenterX = (blockLeft + blockRight) / 2
+      const blockY = firstW.targetRelY
+
+      ctx.save()
+      ctx.translate(blockCenterX, blockY)
+      const pyFont = node.fontSize * 0.55
+      ctx.font = `500 ${pyFont}px "Consolas", "Monaco", monospace`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.globalAlpha = node.opacity * pyOp
+
+      const full = block.pinyin
+      const visible = full.slice(0, block.visiblePinyinCount)
+
+      // 拼音底部横线
+      const pyW = ctx.measureText(full).width
+      const visW = ctx.measureText(visible).width
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.moveTo(-pyW / 2, pyFont * 0.45)
+      ctx.lineTo(pyW / 2, pyFont * 0.45)
+      ctx.stroke()
+
+      // 逐字母绘制
+      ctx.textAlign = 'left'
+      const startX = -visW / 2
+      for (let ci = 0; ci < block.visiblePinyinCount; ci++) {
+        const prefix = visible.slice(0, ci)
+        const charX = startX + ctx.measureText(prefix).width
+        const isLatest = ci === block.visiblePinyinCount - 1 && block.charPhase === 1
+
+        ctx.save()
+        ctx.translate(charX, 0)
+        if (isLatest) {
+          ctx.fillStyle = '#ffffff'
+          ctx.shadowColor = 'rgba(255, 255, 255, 0.5)'
+          ctx.shadowBlur = 8
+        } else {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
+          ctx.shadowBlur = 0
+        }
+        ctx.fillText(full[ci], 0, 0)
+        ctx.restore()
+      }
+      ctx.restore()
+    })
+
+    // ====== 绘制汉字 ======
+    node.words.forEach((w, i) => {
+      if (w.opacity < 0.005) return
 
       ctx.save()
       ctx.translate(w.currentX, w.currentY)
 
-      // ====== 拼音 (在字的位置) ======
-      if (pyOp > 0.01 && w.pluginData.pinyin) {
-        ctx.save()
-        const pyFont = node.fontSize * 0.55
-        ctx.font = `500 ${pyFont}px "Consolas", "Monaco", monospace`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.globalAlpha = node.opacity * pyOp
+      const scale = w.pluginData.charScale || 1.0
+      if (scale !== 1.0) ctx.scale(scale, scale)
 
-        const full: string = w.pluginData.pinyin
-        const visible = full.slice(0, w.pluginData.visiblePinyinCount || 0)
+      ctx.font = `bold ${node.fontSize}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.globalAlpha = node.opacity * w.opacity
 
-        // 拼音底部横线 (模拟 IME 输入下划线)
-        const pyW = ctx.measureText(full).width
-        const visW = ctx.measureText(visible).width
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'
-        ctx.lineWidth = 1.5
-        ctx.beginPath()
-        ctx.moveTo(-pyW / 2, pyFont * 0.45)
-        ctx.lineTo(pyW / 2, pyFont * 0.45)
-        ctx.stroke()
+      const isCurrent = i === node.activeWordIndex && !node.isExiting
+      const isTyped = w.isActivated && !node.isExiting
 
-        // 逐字母绘制
-        ctx.textAlign = 'left'
-        const startX = -visW / 2
-        for (let ci = 0; ci < (w.pluginData.visiblePinyinCount || 0); ci++) {
-          const prefix = visible.slice(0, ci)
-          const charX = startX + ctx.measureText(prefix).width
-          const isLatest = ci === (w.pluginData.visiblePinyinCount || 0) - 1 && phase === 1
-
-          ctx.save()
-          ctx.translate(charX, 0)
-          if (isLatest) {
-            ctx.fillStyle = '#ffffff'
-            ctx.shadowColor = 'rgba(255, 255, 255, 0.5)'
-            ctx.shadowBlur = 8
-          } else {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
-            ctx.shadowBlur = 0
-          }
-          ctx.fillText(full[ci], 0, 0)
-          ctx.restore()
-        }
-        ctx.restore()
-      }
-
-      // ====== 候选框 (字的下方) ======
-      if (candOp > 0.01 && w.pluginData.candidates && w.pluginData.candidates.length > 1) {
-        ctx.save()
-        ctx.globalAlpha = node.opacity * candOp
-
-        const candFont = 16 // 稍微大一点
-        ctx.font = `500 ${candFont}px sans-serif`
-        ctx.textBaseline = 'middle'
-
-        const cands: string[] = w.pluginData.candidates
-        const pad = 12 // 增加内边距
-        const itemGap = 16
-        const labels = cands.map((c: string, ci: number) => `${ci + 1}. ${c}`)
-        const labelWidths = labels.map((l: string) => ctx.measureText(l).width)
-        const boxW = labelWidths.reduce((s: number, lw: number) => s + lw, 0) + itemGap * (labels.length - 1) + pad * 2
-        const boxH = candFont + pad * 2
-        const boxY = node.fontSize * 0.55 + 12 // 稍微往下移一点
-
-        // 阴影
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.2)'
-        ctx.shadowBlur = 12
-        ctx.shadowOffsetY = 4
-
-        // 背景 (明亮风格, 磨砂玻璃质感模拟)
-        ctx.fillStyle = 'rgba(245, 245, 247, 0.95)'
-        ctx.beginPath()
-        ctx.roundRect(-boxW / 2, boxY, boxW, boxH, 8)
-        ctx.fill()
-
+      if (isCurrent) {
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.5)'
+        ctx.shadowBlur = 14
+        ctx.fillStyle = '#ffffff'
+      } else if (isTyped) {
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.15)'
+        ctx.shadowBlur = 4
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'
+      } else {
         ctx.shadowBlur = 0
-        ctx.shadowOffsetY = 0
-
-        // 边框 (非常淡的灰色)
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)'
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.roundRect(-boxW / 2, boxY, boxW, boxH, 8)
-        ctx.stroke()
-
-        // 候选项
-        ctx.textAlign = 'left'
-        let lx = -boxW / 2 + pad
-        labels.forEach((label: string, li: number) => {
-          if (li === 0) {
-            // #1 高亮背景 (圆角矩形, 柔和的品牌蓝)
-            const hlW = labelWidths[li] + 12
-            ctx.fillStyle = 'rgba(0, 120, 212, 0.15)'
-            ctx.beginPath()
-            ctx.roundRect(lx - 6, boxY + 4, hlW, boxH - 8, 6)
-            ctx.fill()
-
-            // #1 文字颜色
-            ctx.fillStyle = 'rgba(0, 120, 212, 0.9)'
-          } else {
-            // 其他候选项文字颜色 (深灰)
-            ctx.fillStyle = 'rgba(60, 60, 64, 0.8)'
-          }
-          ctx.fillText(label, lx, boxY + boxH / 2)
-          lx += labelWidths[li] + itemGap
-        })
-
-        ctx.restore()
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'
       }
 
-      // ====== 汉字 ======
-      if (w.opacity > 0.005) {
-        const scale = w.pluginData.charScale || 1.0
-        ctx.save()
-        if (scale !== 1.0) ctx.scale(scale, scale)
-
-        ctx.font = `bold ${node.fontSize}px sans-serif`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.globalAlpha = node.opacity * w.opacity
-
-        const isCurrent = i === node.activeWordIndex && !node.isExiting
-        const isTyped = w.isActivated && !node.isExiting
-
-        if (isCurrent && phase >= 2) {
-          ctx.shadowColor = 'rgba(255, 255, 255, 0.5)'
-          ctx.shadowBlur = 14
-          ctx.fillStyle = '#ffffff'
-        } else if (isTyped) {
-          ctx.shadowColor = 'rgba(255, 255, 255, 0.15)'
-          ctx.shadowBlur = 4
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'
-        } else {
-          ctx.shadowBlur = 0
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'
-        }
-
-        ctx.fillText(w.text, 0, 0)
-        ctx.restore()
-      }
-
+      ctx.fillText(w.text, 0, 0)
       ctx.restore()
     })
 

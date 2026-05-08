@@ -1,9 +1,16 @@
 import type { LyricNode, WordSprite } from '../lyricSprites'
 
-export interface LyricRenderMode {
+/** 渲染模式的纯元数据（可被序列化为 JSON，后端可读取） */
+export interface LyricModeManifest {
   id: string
   name: string
+  description?: string
+  author?: string
+  version?: string
+}
 
+/** 完整的渲染模式接口（包含可执行函数） */
+export interface LyricRenderMode extends LyricModeManifest {
   /** 初始化行与字的数据 */
   initNode(node: LyricNode, tempCtx: CanvasRenderingContext2D): void
 
