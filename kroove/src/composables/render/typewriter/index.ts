@@ -8,23 +8,39 @@ function isCJK(ch: string): boolean {
   return (c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x3400 && c <= 0x4DBF)
 }
 
-function getWordPinyin(text: string): string {
+function getWordSpelling(text: string): string {
   const hasCJK = [...text].some(isCJK)
-  if (!hasCJK) return ''
-  return pinyin(text, { toneType: 'none', type: 'string' }).replace(/\s+/g, '')
+  if (hasCJK) {
+    // CJK 汉字：返回拼音作为拼写内容
+    return pinyin(text, { toneType: 'none', type: 'string' }).replace(/\s+/g, '')
+  }
+  // 非 CJK（英文等）：返回小写文本本身作为逐字母拼写内容
+  return text.toLowerCase().replace(/\s+/g, '')
 }
 
-// ========== 随机分块：把逐字歌词切成 1~3 字的拼写块 ==========
+// ========== 随机分块：CJK 歌词切成 1~3 字的拼写块，英文每个词独立 ==========
 function randomChunkWords(words: WordSprite[]): { startIdx: number; endIdx: number }[] {
   const blocks: { startIdx: number; endIdx: number }[] = []
   let i = 0
   while (i < words.length) {
-    const remaining = words.length - i
-    const maxSize = Math.min(3, remaining)
-    // 完全随机：1~maxSize，最后一个如果只剩1个就直接单字
-    const size = remaining === 1 ? 1 : Math.floor(Math.random() * maxSize) + 1
-    blocks.push({ startIdx: i, endIdx: i + size })
-    i += size
+    // 检测当前 word 是否包含 CJK 字符
+    const hasCJK = [...words[i].text].some(ch => {
+      const c = ch.codePointAt(0) || 0
+      return (c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x3400 && c <= 0x4DBF)
+    })
+
+    if (!hasCJK) {
+      // 英文/非 CJK：每个词独立为一个 block，不再合并
+      blocks.push({ startIdx: i, endIdx: i + 1 })
+      i += 1
+    } else {
+      // CJK：保持随机 1~3 字分块
+      const remaining = words.length - i
+      const maxSize = Math.min(3, remaining)
+      const size = remaining === 1 ? 1 : Math.floor(Math.random() * maxSize) + 1
+      blocks.push({ startIdx: i, endIdx: i + size })
+      i += size
+    }
   }
   return blocks
 }
@@ -82,7 +98,7 @@ export const TypewriterMode: LyricRenderMode = {
       const chunks = randomChunkWords(node.words)
       const blocks: PinyinBlock[] = chunks.map(chunk => {
         const py = node.words.slice(chunk.startIdx, chunk.endIdx)
-          .map(w => getWordPinyin(w.text))
+          .map(w => getWordSpelling(w.text))
           .join('')
         return {
           startIdx: chunk.startIdx,
@@ -114,6 +130,10 @@ export const TypewriterMode: LyricRenderMode = {
     node.pluginData.caretPhase = 0
     node.pluginData.typedRightEdge = 0
 
+    // 预计算拼音等宽字符宽度，供 updateNode 精确追踪光标
+    tempCtx.font = `500 ${node.fontSize * 0.55}px "Consolas", "Monaco", monospace`
+    node.pluginData.pyCharWidth = tempCtx.measureText('a').width
+
     if (node.words.length > 0) {
       const f = node.words[0]
       node.trackX = f.targetRelX - (f.pluginData.measuredWidth || 20) / 2 - 2
@@ -133,52 +153,71 @@ export const TypewriterMode: LyricRenderMode = {
     const blocks: PinyinBlock[] = node.pluginData.blocks || []
     const PY_RATIO = 0.6
 
-    // ====== 1. 更新每个 Block 的状态机 ======
+    // ====== 1. 更新每个 Block 的状态机（基于歌词时间轴驱动） ======
     blocks.forEach(block => {
-      // Block 激活条件：当前唱到了块内的任意字
-      if (block.charPhase === 0 && externalWordIndex >= 0 && externalWordIndex >= block.startIdx) {
-        block.charPhase = block.pinyinLen > 0 ? 1 : 2
-        block.activatedTime = performance.now()
-      }
+      // Block 的时间范围：取块内第一个字的 start 和最后一个字的 (start + duration)
+      const firstWord = node.words[block.startIdx]
+      const lastWord = node.words[block.endIdx - 1]
+      const blockStartMs = firstWord.start
+      const blockEndMs = lastWord.start + lastWord.duration
 
-      if (block.charPhase === 0) return
+      const elapsed = node.elapsed // 当前行已经播放了多少毫秒
 
-      const elapsed = performance.now() - block.activatedTime
-      // 块的总持续时间 = 块内字数 × 单字平均时长（向后兼容）
-      const wordCount = block.endIdx - block.startIdx
-      const totalDur = Math.max(
-        node.words.slice(block.startIdx, block.endIdx).reduce((s, w) => s + Math.max(w.duration, 300), 0),
-        wordCount * 300
-      )
-      const pyDur = totalDur * PY_RATIO
-      const confirmDur = totalDur * (1 - PY_RATIO)
-
-      if (block.charPhase === 1) {
-        // --- 拼音输入阶段（整个块一起） ---
-        const prog = Math.min(1, elapsed / pyDur)
-        block.visiblePinyinCount = Math.ceil(prog * block.pinyinLen)
-        block.pinyinOpacity = Math.min(1, prog * 2.5)
-
-        if (elapsed >= pyDur) {
-          block.charPhase = 2
-          block.confirmStartTime = performance.now()
-        }
-      } else if (block.charPhase === 2) {
-        // --- 确认阶段（整个块一起淡入） ---
-        const cElapsed = performance.now() - block.confirmStartTime
-        const t = Math.min(1, cElapsed / Math.max(confirmDur, 150))
-
-        block.pinyinOpacity = Math.max(0, 1 - (1 - Math.pow(1 - t, 3)) * 3)
-        block.visiblePinyinCount = block.pinyinLen
-
-        if (t >= 1) {
+      if (elapsed >= blockEndMs) {
+        // 这个 block 的时间已经完全过去：直接 phase 3，字瞬间显示
+        if (block.charPhase !== 3) {
           block.charPhase = 3
           block.pinyinOpacity = 0
-          // 块内所有字标记为已激活
+          block.visiblePinyinCount = block.pinyinLen
           for (let i = block.startIdx; i < block.endIdx; i++) {
             node.words[i].isActivated = true
           }
         }
+      } else if (elapsed >= blockStartMs) {
+        // 正在这个 block 的时间范围内
+        const blockElapsed = elapsed - blockStartMs // 这个 block 已经播放了多久
+
+        // 块的总持续时间 = 块内字数 × 单字平均时长（向后兼容）
+        const wordCount = block.endIdx - block.startIdx
+        const totalDur = Math.max(
+          node.words.slice(block.startIdx, block.endIdx).reduce((s, w) => s + Math.max(w.duration, 300), 0),
+          wordCount * 300
+        )
+        const pyDur = totalDur * PY_RATIO
+        const confirmDur = totalDur * (1 - PY_RATIO)
+
+        if (block.charPhase === 0) {
+          block.charPhase = block.pinyinLen > 0 ? 1 : 2
+        }
+
+        if (block.charPhase === 1) {
+          // --- 拼音输入阶段（整个块一起） ---
+          const prog = Math.min(1, blockElapsed / pyDur)
+          block.visiblePinyinCount = Math.ceil(prog * block.pinyinLen)
+          block.pinyinOpacity = Math.min(1, prog * 2.5)
+
+          if (blockElapsed >= pyDur) {
+            block.charPhase = 2
+          }
+        } else if (block.charPhase === 2) {
+          // --- 确认阶段（整个块一起淡入） ---
+          const cElapsed = blockElapsed - pyDur
+          const t = Math.min(1, Math.max(0, cElapsed) / Math.max(confirmDur, 150))
+
+          block.pinyinOpacity = Math.max(0, 1 - (1 - Math.pow(1 - t, 3)) * 3)
+          block.visiblePinyinCount = block.pinyinLen
+
+          if (t >= 1) {
+            block.charPhase = 3
+            block.pinyinOpacity = 0
+            for (let i = block.startIdx; i < block.endIdx; i++) {
+              node.words[i].isActivated = true
+            }
+          }
+        }
+      } else {
+        // 还没到这个 block
+        block.charPhase = 0
       }
     })
 
@@ -195,43 +234,42 @@ export const TypewriterMode: LyricRenderMode = {
 
       const bIdx = w.pluginData.blockIndex
       if (bIdx === undefined || bIdx === -1) {
-        // 无 block 的字（理论上不会发生）
         w.currentX = w.targetRelX; w.currentY = w.targetRelY
         return
       }
 
       const block = blocks[bIdx]
+
       if (block.charPhase === 0) {
-        // 块未开始：字隐藏
         w.opacity = 0
         w.pluginData.pinyinOpacity = 0
         w.pluginData.charScale = 1.0
       } else if (block.charPhase === 1) {
-        // 拼音阶段：字隐藏，显示拼音
         w.opacity = 0
         w.pluginData.pinyinOpacity = block.pinyinOpacity
         w.pluginData.charScale = 1.2
       } else if (block.charPhase === 2) {
         // 确认阶段：字淡入
-        const cElapsed = performance.now() - block.confirmStartTime
+        const firstWord = node.words[block.startIdx]
+        const lastWord = node.words[block.endIdx - 1]
         const totalDur = Math.max(
           node.words.slice(block.startIdx, block.endIdx).reduce((s, w2) => s + Math.max(w2.duration, 300), 0),
           (block.endIdx - block.startIdx) * 300
         )
         const confirmDur = totalDur * (1 - PY_RATIO)
-        const t = Math.min(1, cElapsed / Math.max(confirmDur, 150))
+        const blockElapsed = node.elapsed - firstWord.start
+        const cElapsed = blockElapsed - totalDur * PY_RATIO
+        const t = Math.min(1, Math.max(0, cElapsed) / Math.max(confirmDur, 150))
         const ease = 1 - Math.pow(1 - t, 3)
 
         w.pluginData.pinyinOpacity = block.pinyinOpacity
         w.pluginData.charScale = 1.2 - 0.2 * ease
         w.opacity = ease
 
-        // 微弹
         if (t > 0.5 && t < 1) {
           w.pluginData.charScale -= Math.sin((t - 0.5) * Math.PI / 0.5) * 0.03
         }
       } else if (block.charPhase === 3) {
-        // 完成：字稳定显示
         w.opacity = 1
         w.pluginData.charScale = 1.0
         w.pluginData.pinyinOpacity = 0
@@ -244,9 +282,41 @@ export const TypewriterMode: LyricRenderMode = {
     // ====== 光标追踪 ======
     if (!node.isExiting && externalWordIndex >= 0 && externalWordIndex < node.words.length) {
       const aw = node.words[externalWordIndex]
-      const halfW = (aw.pluginData.measuredWidth || 20) / 2
-      const tx = aw.targetRelX + halfW + 3
-      const ty = aw.targetRelY
+      const bIdx = aw.pluginData.blockIndex
+      let tx: number
+      let ty: number
+      let halfW: number
+
+      if (bIdx !== undefined && bIdx !== -1) {
+        const block = blocks[bIdx]
+        if (block.charPhase === 1) {
+          // 拼音输入阶段：光标追踪已输入拼音的末尾
+          const firstW = node.words[block.startIdx]
+          const lastW = node.words[block.endIdx - 1]
+          const blockCenterX = (firstW.targetRelX + lastW.targetRelX) / 2
+          const pyCharW = node.pluginData.pyCharWidth || node.fontSize * 0.33
+          const visiblePyW = block.visiblePinyinCount * pyCharW
+          tx = blockCenterX + visiblePyW / 2 + 2
+          ty = firstW.targetRelY
+          const lw = node.words[block.endIdx - 1]
+          halfW = (lw.pluginData.measuredWidth || 20) / 2
+          node.pluginData.typedRightEdge = lw.targetRelX + halfW
+        } else {
+          // phase 2（确认淡入）或 phase 3（已完成）：光标固定在整个 block 最后一个字的右边缘
+          // 避免从 block 内第一个字开始慢慢往后移动的跳变感
+          const lw = node.words[block.endIdx - 1]
+          halfW = (lw.pluginData.measuredWidth || 20) / 2
+          tx = lw.targetRelX + halfW + 3
+          ty = lw.targetRelY
+          node.pluginData.typedRightEdge = lw.targetRelX + halfW
+        }
+      } else {
+        halfW = (aw.pluginData.measuredWidth || 20) / 2
+        tx = aw.targetRelX + halfW + 3
+        ty = aw.targetRelY
+        node.pluginData.typedRightEdge = aw.targetRelX + halfW
+      }
+
       node.trackOpacity += (1 - node.trackOpacity) * 0.15
       if (node.isFirstUpdate) {
         node.trackX = tx; node.trackY = ty; node.isFirstUpdate = false
@@ -254,7 +324,6 @@ export const TypewriterMode: LyricRenderMode = {
         node.trackX += (tx - node.trackX) * 0.25 * safeDt
         node.trackY += (ty - node.trackY) * 0.25 * safeDt
       }
-      node.pluginData.typedRightEdge = aw.targetRelX + halfW
     } else if (node.isExiting) {
       node.trackOpacity *= 0.88
     } else {
