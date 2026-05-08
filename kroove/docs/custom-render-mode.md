@@ -228,8 +228,8 @@ rainbow-bounce/
 ```json
 {
   "id": "rainbow-bounce",
-  "name": "彩虹弹跳",
-  "description": "逐字彩虹弹跳效果，带闪烁光标。",
+  "name": "弦乐共振",
+  "description": "12条频谱琴弦随音乐振动，暖色调共鸣文字与金色光标。",
   "author": "You",
   "version": "1.0.0"
 }
@@ -238,214 +238,261 @@ rainbow-bounce/
 ### 5.3 index.ts 完整实现
 
 ```ts
-import type { LyricRenderMode } from '../types'
-import { NoOpBackgroundRenderer } from '../types'
+import type { LyricRenderMode, BackgroundRenderer } from '../types'
 import type { LyricNode, WordSprite } from '../../lyricSprites'
 import manifest from './manifest.json'
+
+// ============================================================
+//  String Resonance 背景渲染器："弦乐共振" 频谱动效
+//  12 条横跨画布的琴弦，各自监听不同频段，随音乐能量振动。
+//  低频弦粗而暖（深红铜），中频弦亮而金（琥珀），高频弦细而冷（银白）。
+//  ============================================================
+interface StringLine {
+  y: number
+  baseFreq: number
+  phase: number
+  amplitude: number
+  targetAmplitude: number
+  color: string
+  glowColor: string
+  bandStart: number
+  bandEnd: number
+  thickness: number
+}
+
+class StringResonanceRenderer implements BackgroundRenderer {
+  private strings: StringLine[] = []
+  private width = 0
+  private height = 0
+  private time = 0
+
+  init(canvasWidth: number, canvasHeight: number) {
+    this.width = canvasWidth
+    this.height = canvasHeight
+    this.time = 0
+    const count = 12
+    this.strings = []
+    for (let i = 0; i < count; i++) {
+      const t = i / (count - 1)
+      const y = canvasHeight * 0.12 + t * canvasHeight * 0.76
+      let bandStart: number, bandEnd: number
+      let color: string, glowColor: string
+      let thickness: number, baseFreq: number
+      if (t < 0.33) {
+        bandStart = Math.floor(0 + t * 60); bandEnd = bandStart + 15
+        const warmth = t / 0.33
+        color = warmth < 0.5 ? '#6B1A10' : '#A0522D'
+        glowColor = warmth < 0.5 ? 'rgba(107, 26, 16, 0.6)' : 'rgba(160, 82, 45, 0.5)'
+        thickness = 2.2 - warmth * 0.6; baseFreq = 1.5 + warmth * 1.5
+      } else if (t < 0.66) {
+        bandStart = Math.floor(20 + (t - 0.33) * 120); bandEnd = bandStart + 25
+        const mid = (t - 0.33) / 0.33
+        color = mid < 0.5 ? '#B8860B' : '#DAA520'
+        glowColor = mid < 0.5 ? 'rgba(184, 134, 11, 0.5)' : 'rgba(218, 165, 32, 0.4)'
+        thickness = 1.5; baseFreq = 3 + mid * 2
+      } else {
+        bandStart = Math.floor(60 + (t - 0.66) * 120); bandEnd = Math.min(255, bandStart + 30)
+        const high = (t - 0.66) / 0.34
+        color = high < 0.5 ? '#A9A9A9' : '#B0A0C0'
+        glowColor = high < 0.5 ? 'rgba(169, 169, 169, 0.4)' : 'rgba(176, 160, 192, 0.35)'
+        thickness = 0.8; baseFreq = 5 + high * 4
+      }
+      this.strings.push({
+        y, baseFreq, phase: Math.random() * Math.PI * 2,
+        amplitude: 0, targetAmplitude: 0,
+        color, glowColor, bandStart, bandEnd, thickness
+      })
+    }
+  }
+
+  update(dt: number, spectrumData: number[]) {
+    this.time += dt * 0.016
+    this.strings.forEach(s => {
+      let sum = 0, count = 0
+      for (let i = s.bandStart; i < s.bandEnd && i < spectrumData.length; i++) {
+        sum += spectrumData[i]; count++
+      }
+      const energy = count > 0 ? sum / count : 0
+      const energyBoost = Math.min(1, energy * 40)
+      s.targetAmplitude = energyBoost * 40
+      s.amplitude += (s.targetAmplitude - s.amplitude) * 0.12 * dt
+      s.phase += (s.baseFreq * 0.08 + energyBoost * 0.15) * dt
+    })
+  }
+
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.save()
+    this.strings.forEach(s => {
+      ctx.beginPath(); ctx.strokeStyle = s.color
+      ctx.globalAlpha = 0.08; ctx.lineWidth = s.thickness
+      ctx.moveTo(0, s.y); ctx.lineTo(this.width, s.y); ctx.stroke()
+    })
+    ctx.restore()
+    ctx.save()
+    this.strings.forEach(s => {
+      if (s.amplitude < 0.5) return
+      const segments = 80; ctx.beginPath()
+      for (let i = 0; i <= segments; i++) {
+        const x = (i / segments) * this.width
+        const wave1 = Math.sin(s.phase + i * 0.15) * s.amplitude
+        const wave2 = Math.sin(s.phase * 1.7 + i * 0.25) * s.amplitude * 0.4
+        const y = s.y + wave1 + wave2
+        if (i === 0) ctx.moveTo(x, y) else ctx.lineTo(x, y)
+      }
+      const intensity = Math.min(1, s.amplitude / 20)
+      ctx.shadowColor = s.glowColor; ctx.shadowBlur = 8 + intensity * 16
+      ctx.strokeStyle = s.color; ctx.globalAlpha = 0.25 + intensity * 0.55
+      ctx.lineWidth = s.thickness * (1 + intensity * 0.8); ctx.stroke()
+      ctx.shadowBlur = 0; ctx.globalAlpha = 0.4 + intensity * 0.5
+      ctx.lineWidth = s.thickness * 0.5; ctx.stroke()
+    })
+    ctx.restore()
+    ctx.save()
+    this.strings.forEach(s => {
+      ctx.fillStyle = s.color; ctx.globalAlpha = 0.2
+      ctx.beginPath(); ctx.arc(8, s.y, 2, 0, Math.PI * 2)
+      ctx.arc(this.width - 8, s.y, 2, 0, Math.PI * 2); ctx.fill()
+    })
+    ctx.restore()
+  }
+}
+
+const stringBg = new StringResonanceRenderer()
 
 export const RainbowBounceMode: LyricRenderMode = {
   id: manifest.id,
   name: manifest.name,
-  backgroundRenderer: new NoOpBackgroundRenderer(),
+  backgroundRenderer: stringBg,
 
   // ====== 1. 初始化：计算布局 ======
   initNode(node, tempCtx) {
-    node.fontSize = 44
-
-    const GAP = 10
-    tempCtx.font = `bold ${node.fontSize}px sans-serif`
-
-    // 计算整行总宽度
+    node.fontSize = 48
+    const GAP = 14
+    tempCtx.font = `300 ${node.fontSize}px "Segoe UI", "PingFang SC", sans-serif`
     let totalW = 0
     const widths: number[] = []
     node.words.forEach(w => {
       const ww = tempCtx.measureText(w.text).width
-      widths.push(ww)
-      totalW += ww + GAP
+      widths.push(ww); totalW += ww + GAP
     })
-    totalW -= GAP // 最后一个字不需要间距
-
-    // 以行中心为原点，从左到右排列
+    totalW -= GAP
     let cx = -totalW / 2
     node.words.forEach((w, i) => {
       w.targetRelX = cx + widths[i] / 2
       w.targetRelY = 0
-
-      // 动画起点：从下方 100px 处飞入
-      w.originX = w.targetRelX
-      w.originY = w.targetRelY + 100
-
-      w.currentX = w.originX
-      w.currentY = w.originY
-      w.opacity = 0
-      w.isActivated = false
-      w.assemblyDelay = i * 40 // 每个字间隔 40ms 依次入场
-
-      // 预存宽度，避免 draw 时重复 measure
+      const fromTop = i % 2 === 0
+      w.originX = w.targetRelX + (Math.random() - 0.5) * 20
+      w.originY = w.targetRelY + (fromTop ? -120 : 120)
+      w.currentX = w.originX; w.currentY = w.originY
+      w.opacity = 0; w.isActivated = false; w.assemblyDelay = i * 35
       w.pluginData.width = widths[i]
-
+      w.pluginData.floatPhase = Math.random() * Math.PI * 2
+      w.pluginData.floatSpeed = 0.02 + Math.random() * 0.02
       cx += widths[i] + GAP
     })
-
-    // 光标初始位置
     if (node.words.length > 0) {
       const f = node.words[0]
-      node.trackX = f.targetRelX + (f.pluginData.width || 20) / 2 + 4
-      node.trackY = 0
-      node.trackOpacity = 0
+      node.trackX = f.targetRelX + (f.pluginData.width || 20) / 2 + 6
+      node.trackY = 0; node.trackOpacity = 0
     }
-
-    // 自定义状态：光标闪烁相位
-    node.pluginData.caretPhase = 0
+    node.pluginData.resonancePhase = 0
   },
 
   // ====== 2. 每帧更新 ======
   updateNode(node, dt, externalWordIndex) {
     node.elapsed = performance.now() - node.startTime
     node.activeWordIndex = externalWordIndex
-    node.opacity += (1 - node.opacity) * 0.12 // 整行淡入
+    node.opacity += (1 - node.opacity) * 0.1
     const safeDt = Number.isFinite(dt) ? dt : 1
-
-    // 光标闪烁相位
-    node.pluginData.caretPhase = (node.pluginData.caretPhase || 0) + safeDt * 0.08
-
-    // 激活策略：字索引 <= externalWordIndex 的字都被标记为已激活
+    node.pluginData.resonancePhase = (node.pluginData.resonancePhase || 0) + safeDt * 0.06
     node.words.forEach((w, i) => {
       if (!w.isActivated && externalWordIndex >= 0 && i <= externalWordIndex) {
-        w.isActivated = true
-        w.activatedTime = performance.now()
+        w.isActivated = true; w.activatedTime = performance.now()
       }
     })
-
-    // 更新每个字的动画状态
-    node.words.forEach((w, i) => {
-      // --- 离场处理 ---
-      if (node.isExiting) {
-        w.opacity *= 0.9
-        w.currentY -= 2 * safeDt
-        return
-      }
-
-      // --- 未激活的字保持隐藏 ---
-      if (!w.isActivated) {
-        w.opacity = 0
-        return
-      }
-
-      // --- 已激活：执行弹跳入场 ---
+    node.words.forEach((w) => {
+      if (node.isExiting) { w.opacity *= 0.88; w.currentY -= 1.5 * safeDt; return }
+      if (!w.isActivated) { w.opacity = 0; return }
       const elapsed = performance.now() - w.activatedTime
       const delay = w.assemblyDelay
       const t = Math.max(0, elapsed - delay)
-
-      if (t <= 0) {
-        w.opacity = 0
-        return
+      if (t <= 0) { w.opacity = 0; return }
+      const factor = Math.min(1, t / 500)
+      const yEase = 1 - Math.pow(1 - factor, 4)
+      const overshoot = Math.sin(factor * Math.PI * 1.2) * 0.08 * (1 - factor)
+      w.currentX = w.originX + (w.targetRelX - w.originX) * yEase
+      w.currentY = w.originY + (w.targetRelY - w.originY) * yEase + overshoot * 20
+      if (factor >= 1) {
+        w.pluginData.floatPhase += w.pluginData.floatSpeed * safeDt
+        w.currentY += Math.sin(w.pluginData.floatPhase) * 2
       }
-
-      // 弹跳缓动： overshoot 效果
-      const factor = Math.min(1, t / 400)
-      const ease = 1 + Math.sin(factor * Math.PI * 1.5) * 0.15 // 过冲 15%
-      const yEase = 1 - Math.pow(1 - factor, 3) // cubic out
-
-      w.currentX = w.targetRelX
-      w.currentY = w.originY + (w.targetRelY - w.originY) * yEase
-      w.pluginData.bounceScale = ease
-      w.opacity = Math.min(1, t / 150)
+      w.opacity = Math.min(1, t / 200)
     })
-
-    // ====== 光标追踪 ======
     if (!node.isExiting && externalWordIndex >= 0 && externalWordIndex < node.words.length) {
       const aw = node.words[externalWordIndex]
       const halfW = (aw.pluginData.width || 20) / 2
-      const tx = aw.targetRelX + halfW + 4
-      const ty = aw.targetRelY
-
-      node.trackOpacity += (1 - node.trackOpacity) * 0.15
+      const tx = aw.targetRelX + halfW + 6
+      const ty = aw.targetRelY + Math.sin(node.pluginData.resonancePhase) * 3
+      node.trackOpacity += (1 - node.trackOpacity) * 0.12
       if (node.isFirstUpdate) {
-        node.trackX = tx
-        node.trackY = ty
-        node.isFirstUpdate = false
+        node.trackX = tx; node.trackY = ty; node.isFirstUpdate = false
       } else {
-        node.trackX += (tx - node.trackX) * 0.25 * safeDt
-        node.trackY += (ty - node.trackY) * 0.25 * safeDt
+        node.trackX += (tx - node.trackX) * 0.2 * safeDt
+        node.trackY += (ty - node.trackY) * 0.2 * safeDt
       }
     } else if (node.isExiting) {
-      node.trackOpacity *= 0.88
+      node.trackOpacity *= 0.85
     } else {
       node.isFirstUpdate = false
     }
   },
 
-  // ====== 3. 绘制歌词 ======
+  // ====== 3. 绘制歌词（暖色调共鸣文字） ======
   drawLyrics(node, ctx) {
     ctx.save()
     ctx.translate(node.x, node.y)
     ctx.globalAlpha = Math.max(0, node.opacity)
-
     node.words.forEach((w, i) => {
       if (w.opacity < 0.005) return
-
-      ctx.save()
-      ctx.translate(w.currentX, w.currentY)
-
-      // 弹跳缩放
-      const scale = w.pluginData.bounceScale || 1.0
-      if (scale !== 1.0) ctx.scale(scale, scale)
-
-      ctx.font = `bold ${node.fontSize}px sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
+      ctx.save(); ctx.translate(w.currentX, w.currentY)
+      ctx.font = `300 ${node.fontSize}px "Segoe UI", "PingFang SC", sans-serif`
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
       ctx.globalAlpha = node.opacity * w.opacity
-
-      // 颜色：当前字白色高亮，已唱过的字彩虹色，未唱到的字灰色
-      if (i === node.activeWordIndex && !node.isExiting) {
-        ctx.fillStyle = '#ffffff'
-        ctx.shadowColor = 'rgba(255, 255, 255, 0.6)'
-        ctx.shadowBlur = 16
-      } else if (w.isActivated) {
-        // 彩虹色：根据字索引在色相环上取色
-        const hue = (i * 35) % 360
-        ctx.fillStyle = `hsl(${hue}, 85%, 70%)`
-        ctx.shadowBlur = 0
+      const isCurrent = i === node.activeWordIndex && !node.isExiting
+      const isActivated = w.isActivated && !node.isExiting
+      if (isCurrent) {
+        ctx.fillStyle = '#FFFFFF'
+        ctx.shadowColor = 'rgba(218, 165, 32, 0.8)'; ctx.shadowBlur = 24
+      } else if (isActivated) {
+        const t = Math.min(1, (node.words.length - Math.abs(i - node.activeWordIndex)) / node.words.length)
+        const r = 200 + t * 35, g = 170 - t * 40, b = 110 - t * 50
+        ctx.fillStyle = `rgb(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)})`
+        ctx.shadowColor = 'rgba(184, 134, 11, 0.25)'; ctx.shadowBlur = 8
       } else {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'
-        ctx.shadowBlur = 0
+        ctx.fillStyle = 'rgba(180, 160, 120, 0.12)'; ctx.shadowBlur = 0
       }
-
-      ctx.fillText(w.text, 0, 0)
-      ctx.restore()
+      ctx.fillText(w.text, 0, 0); ctx.restore()
     })
-
     ctx.restore()
   },
 
-  // ====== 4. 绘制光标 ======
+  // ====== 4. 绘制光标（共鸣柱） ======
   drawCursor(node, ctx) {
     if (node.trackOpacity < 0.01 || node.isExiting) return
-
-    ctx.save()
-    ctx.translate(node.x, node.y)
-
-    const blinkAlpha = 0.5 + 0.5 * Math.sin(node.pluginData.caretPhase || 0)
-    ctx.globalAlpha = node.opacity * node.trackOpacity * blinkAlpha
-
-    const caretH = node.fontSize * 1.0
-    const caretW = 2.5
-
-    ctx.fillStyle = '#fff'
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.7)'
-    ctx.shadowBlur = 10
-
+    ctx.save(); ctx.translate(node.x, node.y)
+    const phase = node.pluginData.resonancePhase || 0
+    const breath = 0.5 + 0.5 * Math.sin(phase * 1.3)
+    ctx.globalAlpha = node.opacity * node.trackOpacity * (0.6 + breath * 0.4)
+    const h = node.fontSize * 1.1, x = node.trackX, y = node.trackY
     ctx.beginPath()
-    ctx.roundRect(
-      node.trackX - caretW / 2,
-      node.trackY - caretH / 2,
-      caretW,
-      caretH,
-      1.25
-    )
-    ctx.fill()
-
+    const jitter = Math.sin(phase * 3) * 0.8
+    ctx.moveTo(x + jitter, y - h / 2); ctx.lineTo(x - jitter, y + h / 2)
+    ctx.strokeStyle = '#DAA520'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'
+    ctx.shadowColor = 'rgba(218, 165, 32, 0.8)'; ctx.shadowBlur = 14; ctx.stroke()
+    ctx.beginPath(); ctx.arc(x, y + h / 2 + 4, 3, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(218, 165, 32, 0.6)'; ctx.fill()
+    ctx.beginPath(); ctx.arc(x + jitter * 0.5, y - h / 2, 2, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; ctx.fill()
     ctx.restore()
   }
 }
