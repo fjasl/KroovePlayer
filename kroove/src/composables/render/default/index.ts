@@ -1,6 +1,87 @@
-import type { LyricRenderMode } from '../types'
+import type { LyricRenderMode, BackgroundRenderer } from '../types'
 import type { LyricNode, WordSprite } from '../../lyricSprites'
+import { PolygonSprite } from '../../lyricSprites'
 import manifest from './manifest.json'
+
+// ============================================================
+//  default 模式的私有背景实现：频谱爆裂多边形
+//  仅供本模式内部使用，不对外暴露为可复用组件。
+//  其他模式如需类似效果，应自行基于 spectrumData 从底层实现。
+// ============================================================
+class DefaultBackgroundRenderer implements BackgroundRenderer {
+  private polygons: PolygonSprite[] = []
+  private width = 0
+  private height = 0
+
+  private smoothedEnergies = { low: 0, mid: 0, high: 0 }
+  private lastEnergies = { low: 0, mid: 0, high: 0 }
+  private lastSpawnTimes = { low: 0, mid: 0, high: 0 }
+  private readonly BEAT_COOLDOWN = 60
+  private readonly SMOOTH_FACTOR_FAST = 0.88
+
+  init(canvasWidth: number, canvasHeight: number) {
+    this.width = canvasWidth
+    this.height = canvasHeight
+    this.polygons = []
+  }
+
+  update(dt: number, spectrumData: number[]) {
+    if (spectrumData.length === 0) return
+
+    const getPeak = (start: number, end: number) => {
+      let max = 0
+      for (let i = start; i < end; i++) {
+        if (spectrumData[i] > max) max = spectrumData[i]
+      }
+      return max
+    }
+
+    const lowPeak = getPeak(0, 15)
+    const midPeak = getPeak(15, 60)
+    const highPeak = getPeak(60, 180)
+    const now = performance.now()
+
+    if (this.checkBeat(lowPeak, 'low', 0.005, now)) {
+      this.polygons.push(new PolygonSprite(this.width, this.height, 3 + Math.floor(Math.random() * 2), lowPeak))
+    }
+    if (this.checkBeat(midPeak, 'mid', 0.004, now)) {
+      this.polygons.push(new PolygonSprite(this.width, this.height, 5 + Math.floor(Math.random() * 2), midPeak))
+    }
+    if (this.checkBeat(highPeak, 'high', 0.003, now)) {
+      this.polygons.push(new PolygonSprite(this.width, this.height, 8, highPeak * 1.2))
+    }
+
+    for (let i = this.polygons.length - 1; i >= 0; i--) {
+      this.polygons[i].update(dt)
+      if (this.polygons[i].opacity <= 0) {
+        this.polygons.splice(i, 1)
+      }
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D) {
+    this.polygons.forEach(poly => poly.draw(ctx))
+  }
+
+  private checkBeat(current: number, band: 'low' | 'mid' | 'high', minEnergy: number, now: number): boolean {
+    this.smoothedEnergies[band] = (this.smoothedEnergies[band] * this.SMOOTH_FACTOR_FAST) + (current * (1 - this.SMOOTH_FACTOR_FAST))
+    const last = this.lastEnergies[band]
+    const delta = current - last
+    const deltaThreshold = Math.max(minEnergy * 2, last * 0.4)
+    const peakCondition = current > minEnergy && current > this.smoothedEnergies[band] * 1.3
+    const deltaCondition = current > minEnergy && delta > deltaThreshold
+
+    let isBeat = false
+    if ((peakCondition || deltaCondition) && (now - this.lastSpawnTimes[band]) > this.BEAT_COOLDOWN) {
+      this.lastSpawnTimes[band] = now
+      isBeat = true
+    }
+    this.lastEnergies[band] = current
+    return isBeat
+  }
+}
+
+const defaultBgRenderer = new DefaultBackgroundRenderer()
 
 const ENTRANCE_STYLES = ['BLAST', 'GLIDE_UP', 'ZOOM_IN', 'ROLL_IN']
 const EXIT_STYLES = ['SMOKE', 'SHATTER', 'VORTEX', 'FLIP_OUT']
@@ -8,6 +89,8 @@ const EXIT_STYLES = ['SMOKE', 'SHATTER', 'VORTEX', 'FLIP_OUT']
 export const DefaultMode: LyricRenderMode = {
   id: manifest.id,
   name: manifest.name,
+
+  backgroundRenderer: defaultBgRenderer,
 
   initNode(node: LyricNode, tempCtx: CanvasRenderingContext2D) {
     const entranceStyle = ENTRANCE_STYLES[Math.floor(Math.random() * ENTRANCE_STYLES.length)]

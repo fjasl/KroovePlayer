@@ -1,6 +1,8 @@
 /**
  * lyricSprites.ts
  * 歌词画布精灵系统：WordSprite（逐字粒子）、LyricNode（行级容器）、PolygonSprite（频谱多边形）
+ * 
+ * PolygonSprite 是一个底层几何图形工具类，各模式可按需使用，但系统不将其作为高层可复用组件暴露。
  */
 
 import type { LyricRenderMode } from './render/types'

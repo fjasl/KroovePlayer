@@ -1,7 +1,10 @@
 import type { LyricRenderMode } from '../types'
+import { NoOpBackgroundRenderer } from '../types'
 import type { LyricNode, WordSprite } from '../../lyricSprites'
 import { pinyin } from 'pinyin-pro'
 import manifest from './manifest.json'
+
+const noOpBg = new NoOpBackgroundRenderer()
 
 function isCJK(ch: string): boolean {
   const c = ch.codePointAt(0) || 0
@@ -61,6 +64,7 @@ interface PinyinBlock {
 export const TypewriterMode: LyricRenderMode = {
   id: manifest.id,
   name: manifest.name,
+  backgroundRenderer: noOpBg,
 
   initNode(node: LyricNode, tempCtx: CanvasRenderingContext2D) {
     node.fontSize = 40

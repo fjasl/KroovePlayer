@@ -1,12 +1,18 @@
 /**
  * useCanvasEngine.ts
- * Canvas 渲染引擎 Composable：管理画布初始化、渲染主循环、歌词/频谱渲染、节奏检测。
- * 从 FullScreenPlayer.vue 中分离，使主组件只关注 UI 布局。
+ * Canvas 渲染引擎 Composable：管理画布初始化、渲染主循环。
+ * 
+ * 【架构原则】引擎只负责三件事：
+ * 1. 按开关顺序调用三层绘制（背景层 -> 歌词层 -> 光标层）
+ * 2. 提供数据（spectrumData、wordIndex 等）给渲染模式
+ * 3. 管理 LyricNode 的生命周期（创建、离场、销毁）
+ * 
+ * 至于每一层具体怎么画，全权交由当前 LyricRenderMode 决定。
  */
 
 import { ref, shallowRef, watch, onMounted, onUnmounted } from 'vue'
 import { usePlayerStore } from '../stores/player'
-import { LyricNode, PolygonSprite } from './lyricSprites'
+import { LyricNode } from './lyricSprites'
 import { getRenderMode, loadRenderMode, isModeLoaded } from './render/index'
 
 export function useCanvasEngine() {
@@ -18,15 +24,6 @@ export function useCanvasEngine() {
   let lastTimestamp = 0
 
   const activeNodes = shallowRef<LyricNode[]>([])
-  const activePolygons = shallowRef<PolygonSprite[]>([])
-
-  // --- 节奏跟踪状态 (自适应包络 + 差分检测) ---
-  let smoothedEnergies = { low: 0, mid: 0, high: 0 }
-  let lastEnergies = { low: 0, mid: 0, high: 0 }
-  let lastSpawnTimes = { low: 0, mid: 0, high: 0 }
-
-  const BEAT_COOLDOWN = 60
-  const SMOOTH_FACTOR_FAST = 0.88
 
   // --- 画布初始化 ---
   const initCanvas = () => {
@@ -39,29 +36,11 @@ export function useCanvasEngine() {
     ctx = canvas.getContext('2d')
   }
 
-  // --- 频谱节奏检测器 ---
-  const checkBeat = (current: number, band: 'low' | 'mid' | 'high', minEnergy: number, now: number): boolean => {
-    // 1. 指数移动平均包络 (自适应背景)
-    smoothedEnergies[band] = (smoothedEnergies[band] * SMOOTH_FACTOR_FAST) + (current * (1 - SMOOTH_FACTOR_FAST))
-
-    // 2. 上升沿激发检测 (差分检测)
-    const last = lastEnergies[band]
-    const delta = current - last
-    const deltaThreshold = Math.max(minEnergy * 2, last * 0.4)
-
-    // 条件 A: 峰值比例检测
-    const peakCondition = current > minEnergy && current > smoothedEnergies[band] * 1.3
-    // 条件 B: 能量暴涨检测 (Rising Edge)
-    const deltaCondition = current > minEnergy && delta > deltaThreshold
-
-    let isBeat = false
-    if ((peakCondition || deltaCondition) && (now - lastSpawnTimes[band]) > BEAT_COOLDOWN) {
-      lastSpawnTimes[band] = now
-      isBeat = true
-    }
-
-    lastEnergies[band] = current
-    return isBeat
+  // --- 初始化当前模式的背景层 ---
+  const initModeBackground = () => {
+    if (!lyricCanvasRef.value) return
+    const mode = getRenderMode(playerStore.lyricMode)
+    mode.backgroundRenderer.init(lyricCanvasRef.value.width, lyricCanvasRef.value.height)
   }
 
   // --- 渲染主循环 ---
@@ -74,7 +53,18 @@ export function useCanvasEngine() {
 
     ctx.clearRect(0, 0, lyricCanvasRef.value.width, lyricCanvasRef.value.height)
 
+    const mode = getRenderMode(playerStore.lyricMode)
+
+    // ==========================================
     // --- 状态更新阶段 ---
+    // ==========================================
+
+    // 1. 更新背景层状态（频谱数据交给模式自己处理）
+    if (playerStore.enableSpectrum) {
+      mode.backgroundRenderer.update(dt, playerStore.spectrumData)
+    }
+
+    // 2. 更新歌词层状态
     if (playerStore.enableLyricsAnimation) {
       for (let i = activeNodes.value.length - 1; i >= 0; i--) {
         const node = activeNodes.value[i]
@@ -86,59 +76,13 @@ export function useCanvasEngine() {
       }
     }
 
-    // --- [频谱渲染] 中心爆裂多边形 ---
-    if (playerStore.enableSpectrum && playerStore.spectrumData.length > 0) {
-      const data = playerStore.spectrumData
-      const canvas = lyricCanvasRef.value
-
-      // 获取频段峰值
-      const getPeak = (start: number, end: number) => {
-        let max = 0
-        for (let i = start; i < end; i++) {
-          if (data[i] > max) max = data[i]
-        }
-        return max
-      }
-
-      const lowPeak = getPeak(0, 15)
-      const midPeak = getPeak(15, 60)
-      const highPeak = getPeak(60, 180)
-
-      const now = performance.now()
-
-      // 自适应频率检测
-      if (playerStore.isPlaying) {
-        // 低频：底鼓/基调
-        if (checkBeat(lowPeak, 'low', 0.005, now)) {
-          activePolygons.value.push(new PolygonSprite(canvas.width, canvas.height, 3 + Math.floor(Math.random() * 2), lowPeak))
-        }
-        // 中频：军鼓/打击乐
-        if (checkBeat(midPeak, 'mid', 0.004, now)) {
-          activePolygons.value.push(new PolygonSprite(canvas.width, canvas.height, 5 + Math.floor(Math.random() * 2), midPeak))
-        }
-        // 高频：点缀/镲片
-        if (checkBeat(highPeak, 'high', 0.003, now)) {
-          activePolygons.value.push(new PolygonSprite(canvas.width, canvas.height, 8, highPeak * 1.2))
-        }
-      }
-
-      // 更新多边形
-      for (let i = activePolygons.value.length - 1; i >= 0; i--) {
-        const poly = activePolygons.value[i]
-        poly.update(dt)
-        if (poly.opacity <= 0) {
-          activePolygons.value.splice(i, 1)
-        }
-      }
-    }
-
     // ==========================================
-    // --- 绘制阶段 (三层架构) ---
+    // --- 绘制阶段 (三层架构，由引擎保证顺序) ---
     // ==========================================
 
-    // Layer 1 (底层): 频谱多边形
+    // Layer 1 (底层): 背景/频谱动效 —— 模式自己决定画什么
     if (playerStore.enableSpectrum) {
-      activePolygons.value.forEach(poly => poly.draw(ctx!))
+      mode.backgroundRenderer.draw(ctx!)
     }
 
     // Layer 2 (中层): 歌词文本
@@ -173,7 +117,6 @@ export function useCanvasEngine() {
   // --- 清空所有精灵 ---
   const clearAll = () => {
     activeNodes.value = []
-    activePolygons.value = []
   }
 
   // --- 注入新歌词行 ---
@@ -219,6 +162,7 @@ export function useCanvasEngine() {
         await loadRenderMode(playerStore.lyricMode)
 
         initCanvas()
+        initModeBackground()
 
         // 校准当前歌词行
         const currentIdx = playerStore.currentLineIndex
@@ -245,6 +189,13 @@ export function useCanvasEngine() {
     }
   })
 
+  // --- 监听渲染模式切换：重新初始化背景 ---
+  watch(() => playerStore.lyricMode, () => {
+    if (playerStore.isFullScreen) {
+      initModeBackground()
+    }
+  })
+
   // --- 画布初始化补丁：开关切换时重初始化 ---
   watch(() => (playerStore.enableLyricsAnimation || playerStore.enableSpectrum), (val) => {
     if (!playerStore.enableLyricsAnimation) {
@@ -254,6 +205,7 @@ export function useCanvasEngine() {
     if (val && playerStore.isFullScreen) {
       setTimeout(() => {
         initCanvas()
+        initModeBackground()
         startRenderLoop()
       }, 50)
     }
@@ -280,7 +232,6 @@ export function useCanvasEngine() {
 
   return {
     lyricCanvasRef,
-    activeNodes,
-    activePolygons
+    activeNodes
   }
 }
