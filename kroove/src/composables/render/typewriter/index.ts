@@ -1,10 +1,8 @@
 import type { LyricRenderMode } from '../types'
 import type { LyricNode, WordSprite } from '../../lyricSprites'
 import { pinyin } from 'pinyin-pro'
+import { getDynamicCandidates } from './candidates'
 import manifest from './manifest.json'
-
-// 常用字池 (生成假候选用)
-const POOL = '的一是不了在人有这中大来上为国地到以说时要就出会也把好过能对着下自之年后作里用去行十二三四五六七八九百千万日月风雨花草山水天春夏秋冬东南西北红蓝白黑金银高长开门心手口目耳足石火土木'
 
 function isCJK(ch: string): boolean {
   const c = ch.codePointAt(0) || 0
@@ -15,38 +13,6 @@ function getWordPinyin(text: string): string {
   const hasCJK = [...text].some(isCJK)
   if (!hasCJK) return ''
   return pinyin(text, { toneType: 'none', type: 'string' }).replace(/\s+/g, '')
-}
-
-// 预计算字池拼音
-const POOL_DATA = POOL.split('').map(char => ({
-  char,
-  py: getWordPinyin(char)
-})).filter(item => item.py.length > 0)
-
-function getDynamicCandidates(real: string, prefix: string, count: number): string[] {
-  const result = [real]
-  if (!prefix) return result
-
-  const matches = POOL_DATA.filter(item => item.py.startsWith(prefix) && item.char !== real)
-  const fallbacks = POOL_DATA.filter(item => item.char !== real)
-
-  const shuffle = (arr: any[]) => [...arr].sort(() => Math.random() - 0.5)
-  const shuffledMatches = shuffle(matches)
-  const shuffledFallbacks = shuffle(fallbacks)
-
-  while (result.length < count) {
-    if (shuffledMatches.length > 0) {
-      result.push(shuffledMatches.pop()!.char)
-    } else if (shuffledFallbacks.length > 0) {
-      const fallback = shuffledFallbacks.pop()!.char
-      if (!result.includes(fallback)) {
-        result.push(fallback)
-      }
-    } else {
-      break
-    }
-  }
-  return result
 }
 
 export const TypewriterMode: LyricRenderMode = {
@@ -145,7 +111,7 @@ export const TypewriterMode: LyricRenderMode = {
           // --- 拼音输入阶段 ---
           const prog = Math.min(1, elapsed / pyDur)
           const newVisibleCount = Math.ceil(prog * w.pluginData.pinyinLen)
-          
+
           if (w.pluginData.visiblePinyinCount !== newVisibleCount) {
             w.pluginData.visiblePinyinCount = newVisibleCount
             const prefix = (w.pluginData.pinyin as string).slice(0, newVisibleCount)
@@ -331,7 +297,7 @@ export const TypewriterMode: LyricRenderMode = {
             ctx.beginPath()
             ctx.roundRect(lx - 6, boxY + 4, hlW, boxH - 8, 6)
             ctx.fill()
-            
+
             // #1 文字颜色
             ctx.fillStyle = 'rgba(0, 120, 212, 0.9)'
           } else {

@@ -8,6 +8,7 @@ import { ref, shallowRef, watch, onMounted, onUnmounted } from 'vue'
 import { usePlayerStore } from '../stores/player'
 import { LyricNode, PolygonSprite } from './lyricSprites'
 import { getRenderMode } from './render/index'
+import { setLyricContext } from './render/typewriter/candidates'
 
 export function useCanvasEngine() {
   const playerStore = usePlayerStore()
@@ -204,6 +205,13 @@ export function useCanvasEngine() {
 
     injectLyricLine(lyricsLines[newIdx], playerStore.lineProgress)
   })
+
+  // --- [New] 歌词上下文注入：切歌时更新候选字源 ---
+  watch(() => playerStore.currentTrack?.lyrics, (lyrics) => {
+    if (lyrics?.lines) {
+      setLyricContext(lyrics.lines)
+    }
+  }, { immediate: true })
 
   // --- 全屏状态联动 ---
   watch(() => playerStore.isFullScreen, (isFull) => {
