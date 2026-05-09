@@ -56,8 +56,7 @@ void PlayerCore::initializeMpv() {
 #ifdef _WIN32
   // Windows 下默认，暂不处理特殊 loopback 管道
 #else
-  // Linux: 强制 mpv 使用 pulse音频后端，并输出到我们用 pactl 建立的虚拟管道
-  mpv_set_option_string(m_mpv, "audio-device", "pulse/agplayer_loopback");
+  // Linux: 使用系统默认 PulseAudio 设备（与 Visualizer 监听的默认 sink monitor 保持一致）
   mpv_set_option_string(m_mpv, "audio-fallback-to-null", "yes");
 #endif
 
