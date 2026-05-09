@@ -90,7 +90,20 @@ export class LyricNode {
   }
 
   update(dt: number, externalWordIndex: number) {
-    this.mode.updateNode(this, dt, externalWordIndex)
+    // 【兼容层】非逐字歌词时 C++ 输出 wordIndex = -1，
+    // 此时自动将全部 sprite 标记为已激活，避免整行永远点不亮
+    let effectiveIndex = externalWordIndex
+    if (externalWordIndex === -1 && this.words.length > 0) {
+      this.words.forEach(w => {
+        if (!w.isActivated) {
+          w.isActivated = true
+          w.activatedTime = performance.now()
+        }
+      })
+      effectiveIndex = this.words.length - 1
+    }
+
+    this.mode.updateNode(this, dt, effectiveIndex)
   }
 
   drawLyrics(ctx: CanvasRenderingContext2D) {
