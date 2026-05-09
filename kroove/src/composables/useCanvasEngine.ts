@@ -64,17 +64,18 @@ export function useCanvasEngine() {
       mode.backgroundRenderer.update(dt, playerStore.spectrumData)
     }
 
-    // 2. 更新歌词层状态
-    if (playerStore.enableLyricsAnimation) {
-      for (let i = activeNodes.value.length - 1; i >= 0; i--) {
-        const node = activeNodes.value[i]
-        const wordIdx = node.isExiting ? -1 : playerStore.wordIndex
-        node.update(dt, wordIdx)
-        if (node.isExiting && node.opacity < 0.01) {
-          activeNodes.value.splice(i, 1)
+      // 2. 更新歌词层状态
+      if (playerStore.enableLyricsAnimation) {
+        for (let i = activeNodes.value.length - 1; i >= 0; i--) {
+          const node = activeNodes.value[i]
+          const wordIdx = node.isExiting ? -1 : playerStore.wordIndex
+          const wordProg = node.isExiting ? 0 : playerStore.wordProgress
+          node.update(dt, wordIdx, wordProg)
+          if (node.isExiting && node.opacity < 0.01) {
+            activeNodes.value.splice(i, 1)
+          }
         }
       }
-    }
 
     // ==========================================
     // --- 绘制阶段 (三层架构，由引擎保证顺序) ---
