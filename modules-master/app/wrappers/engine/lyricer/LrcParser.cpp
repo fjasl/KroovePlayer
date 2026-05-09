@@ -57,6 +57,15 @@ bool LrcParser::parse(const std::string &lrcContent) {
                      }),
       this->doc.lines.end());
 
+  // 计算文档级别的是否逐字标志：只要任意一行包含逐字信息，整首歌即视为逐字歌词
+  this->doc.isWordByWord = false;
+  for (const auto &line : this->doc.lines) {
+    if (line.isWordByWord) {
+      this->doc.isWordByWord = true;
+      break;
+    }
+  }
+
   return true;
 }
 

@@ -64,6 +64,7 @@ Napi::Value EngineWrapper::Load(const Napi::CallbackInfo &info) {
   result.Set("album", doc.album);
   result.Set("by", doc.by);
   result.Set("offset", doc.offset);
+  result.Set("isWordByWord", doc.isWordByWord);
 
   // 歌词行
   Napi::Array lines = Napi::Array::New(env, doc.lines.size());

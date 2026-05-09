@@ -43,6 +43,10 @@ struct LyricDocument {
   std::string by;      // 歌词制作者 [by:xxx]
   double offset = 0.0; // 全局时间偏移量 (秒) [offset:xxx]
 
+  // 如果为 true，表示整首歌至少有一行包含逐字时间信息。
+  // 前端可通过此字段快速判断是否需要启用逐字高亮渲染路径。
+  bool isWordByWord = false;
+
   std::vector<LineLyric> lines; // 按时间正序排列的歌词行
 };
 
